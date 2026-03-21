@@ -1,0 +1,15 @@
+.idea/
+bin/
+obj/
+bin/Release/
+bin/Debug/
+results/
+.vs/
+*.suo
+*.sdf
+*.exe
+*.log
+*.filters
+*.user
+*.obj
+*.pdb
