@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 
+using Glean.Enumerators;
+
 namespace Glean.Contexts;
 
 /// <summary>
@@ -75,6 +77,15 @@ public readonly struct AssemblyReferenceContext : IEquatable<AssemblyReferenceCo
     /// </summary>
     public AssemblyFlags Flags => _reference.Flags;
 
+    /// <summary>
+    /// Enumerates this assembly reference's custom attributes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public CustomAttributeEnumerator EnumerateCustomAttributes()
+    {
+        return CustomAttributeEnumerator.Create(_reader, _reference.GetCustomAttributes());
+    }
+    
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(AssemblyReferenceContext other)
     {

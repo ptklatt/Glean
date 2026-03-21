@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 
+using Glean.Enumerators;
 using Glean.Extensions;
 
 namespace Glean.Contexts;
@@ -122,12 +123,36 @@ public readonly struct ParameterContext : IEquatable<ParameterContext>
         }
     }
 
+    /// <summary>
+    /// Enumerates only attributes whose type matches the specified namespace and name.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public FilteredCustomAttributeEnumerator EnumerateAttributes(string ns, string name)
+    {
+        return FilteredCustomAttributeEnumerator.Create(_reader, _parameter.GetCustomAttributes(), ns, name);
+    }
+
     /// <summary>Returns true if a custom attribute of the specified type is present.</summary>
     /// <remarks>Zero allocation.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasAttribute(string ns, string name)
     {
         return _parameter.GetCustomAttributes().TryFindAttribute(_reader, ns, name, out _);
+    }
+
+    /// <summary>Finds a custom attribute by namespace and name; returns the context if found.</summary>
+    /// <remarks>Zero allocation.</remarks>
+    public bool TryFindAttribute(string ns, string name, out CustomAttributeContext attribute)
+    {
+        var attributes = _parameter.GetCustomAttributes();
+        if (!attributes.TryFindAttributeHandle(_reader, ns, name, out var handle))
+        {
+            attribute = default;
+            return false;
+        }
+
+        attribute = CustomAttributeContext.Create(_reader, handle);
+        return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -221,6 +221,24 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     {
         return GenericParameterEnumerator.Create(_reader, _definition.GetGenericParameters());
     }
+    
+    /// <summary>
+    /// Enumerates this method's custom attributes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public CustomAttributeEnumerator EnumerateCustomAttributes()
+    {
+        return CustomAttributeEnumerator.Create(_reader, _definition.GetCustomAttributes());
+    }
+
+    /// <summary>
+    /// Enumerates only attributes whose type matches the specified namespace and name.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public FilteredCustomAttributeEnumerator EnumerateAttributes(string ns, string name)
+    {
+        return FilteredCustomAttributeEnumerator.Create(_reader, _definition.GetCustomAttributes(), ns, name);
+    }
 
     /// <summary>
     /// Decodes the method signature using the specified provider.

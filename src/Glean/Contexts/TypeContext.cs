@@ -371,6 +371,24 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     }
 
     /// <summary>
+    /// Enumerates this type's custom attributes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public CustomAttributeEnumerator EnumerateCustomAttributes()
+    {
+        return CustomAttributeEnumerator.Create(_reader, _definition.GetCustomAttributes());
+    }
+
+    /// <summary>
+    /// Enumerates only attributes whose type matches the specified namespace and name.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Enumerators.FilteredCustomAttributeEnumerator EnumerateAttributes(string ns, string name)
+    {
+        return Enumerators.FilteredCustomAttributeEnumerator.Create(_reader, _definition.GetCustomAttributes(), ns, name);
+    }
+
+    /// <summary>
     /// Enumerates nested types defined within this type.
     /// </summary>
     /// <remarks>
@@ -419,12 +437,42 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public bool ImplementsInterfaceDirectly(string ns, string name)
         => _definition.ImplementsInterfaceDirectly(_reader, ns, name);
 
+    /// <summary>
+    /// Enumerates all attributes matching <paramref name="ns"/> and <paramref name="name"/> across this type
+    /// and all its members (methods, fields, properties, events).
+    /// </summary>
+    /// <param name="ns">The attribute namespace (e.g., <c>"System.Runtime.CompilerServices"</c>).</param>
+    /// <param name="name">The attribute type name (e.g., <c>"ObsoleteAttribute"</c>).</param>
+    /// <returns>A zero allocation struct enumerator that yields each matching <see cref="CustomAttributeContext"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public AllMemberAttributeEnumerator EnumerateAllAttributes(string ns, string name)
+    {
+        return AllMemberAttributeEnumerator.Create(this, ns, name);
+    }
+
     /// <summary>Returns true if a custom attribute of the specified type is present.</summary>
     /// <remarks>Zero allocation.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasAttribute(string ns, string name)
     {
         return _definition.GetCustomAttributes().TryFindAttribute(_reader, ns, name, out _);
+    }
+
+    /// <summary>Finds a custom attribute by namespace and name; returns the context if found.</summary>
+    /// <remarks>
+    /// Zero allocation. 
+    /// </remarks>
+    public bool TryFindAttribute(string ns, string name, out CustomAttributeContext attribute)
+    {
+        var attributes = _definition.GetCustomAttributes();
+        if (!attributes.TryFindAttributeHandle(_reader, ns, name, out var handle))
+        {
+            attribute = default;
+            return false;
+        }
+
+        attribute = CustomAttributeContext.Create(_reader, handle);
+        return true;
     }
 
     /// <summary>
