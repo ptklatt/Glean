@@ -2,9 +2,10 @@ using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
-using System.Reflection.PortableExecutable;
-using Glean.Providers;
 using Xunit;
+
+using Glean.Providers;
+using Glean.Tests.Utility;
 
 namespace Glean.Tests.Providers;
 
@@ -12,7 +13,7 @@ public class StringTypeProviderTests
 {
     private static readonly StringTypeProvider Provider = StringTypeProvider.Instance;
 
-    // == Primitive types ======================================================
+    // == Primitive types =====================================================
 
     [Fact]
     public void GetPrimitiveType_Int32_ReturnsCSharpAlias()
@@ -27,7 +28,7 @@ public class StringTypeProviderTests
         Assert.Equal(unknown.ToString(), Provider.GetPrimitiveType(unknown));
     }
 
-    // == Array types ==========================================================
+    // == Array types =========================================================
 
     [Fact]
     public void GetArrayType_Rank1_ReturnsSingleStarBracket()
@@ -71,7 +72,7 @@ public class StringTypeProviderTests
         Assert.Equal("int", Provider.GetPinnedType("int"));
     }
 
-    // == Generic types ========================================================
+    // == Generic types =======================================================
 
     [Fact]
     public void GetGenericInstantiation_MetadataName_ProducesAngleBracketSyntax()
@@ -97,8 +98,8 @@ public class StringTypeProviderTests
     [Fact]
     public void GetTypeFromDefinition_ReturnsNamespaceQualifiedName()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(string).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var handle = FindTypeDefinition(reader, "System", "String");
         Assert.False(handle.IsNil, "Could not locate System.String TypeDefinition in CoreLib.");
@@ -109,8 +110,8 @@ public class StringTypeProviderTests
     [Fact]
     public void GetTypeFromReference_ReturnsNamespaceQualifiedName()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(StringTypeProvider).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenMetadata(typeof(StringTypeProvider).Assembly);
+        var reader = metadata.Reader;
 
         var handle = FindTypeReference(reader, "System", "Object");
         Assert.False(handle.IsNil, "Could not locate System.Object TypeReference.");
@@ -121,8 +122,8 @@ public class StringTypeProviderTests
     [Fact]
     public void Decode_ListGetRange_ReturnTypeUsesTypeSpecFormatting()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(List<>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var methodInfo = typeof(List<>).GetMethod("GetRange", new[] { typeof(int), typeof(int) });
         Assert.NotNull(methodInfo);
@@ -142,7 +143,7 @@ public class StringTypeProviderTests
         Assert.Equal("int", Provider.GetModifiedType("mod", "int", isRequired));
     }
 
-    // == Function pointers ====================================================
+    // == Function pointers ===================================================
 
     [Fact]
     public void GetFunctionPointerType_NoParams_ReturnTypeOnly()
@@ -170,7 +171,7 @@ public class StringTypeProviderTests
         Assert.Equal("delegate*<int, string, bool>", Provider.GetFunctionPointerType(sig));
     }
 
-    // == IsSystemType =========================================================
+    // == IsSystemType ========================================================
 
     [Fact]
     public void GetSystemType_ReturnsSystemTypeName()
@@ -200,7 +201,7 @@ public class StringTypeProviderTests
         Assert.Equal(PrimitiveTypeCode.Int32, Provider.GetUnderlyingEnumType("Any.Enum"));
     }
 
-    // == FormatMethodSignature (integration via BCL metadata) =================
+    // == FormatMethodSignature (integration via BCL metadata) ================
 
     private static TypeDefinitionHandle FindTypeDefinition(MetadataReader reader, string ns, string name)
     {
@@ -241,8 +242,8 @@ public class StringTypeProviderTests
     [Fact]
     public void FormatMethodSignature_ListAdd_DecodesGenericParameter()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(List<>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var itemType = typeof(List<>).GetGenericArguments()[0];
         var methodInfo = typeof(List<>).GetMethod("Add", new[] { itemType });
@@ -255,8 +256,8 @@ public class StringTypeProviderTests
     [Fact]
     public void FormatMethodSignature_StringContains_DecodesPrimitiveTypes()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(string).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var methodInfo = typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) });
         Assert.NotNull(methodInfo);
@@ -268,8 +269,8 @@ public class StringTypeProviderTests
     [Fact]
     public void FormatMethodSignature_WithoutReturnType_OmitsReturnType()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(List<>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var itemType = typeof(List<>).GetGenericArguments()[0];
         var methodInfo = typeof(List<>).GetMethod("Add", new[] { itemType });

@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.ComponentModel;
 using System.Reflection.Metadata;
+
 using Glean.Signatures;
 
 namespace Glean.Providers;

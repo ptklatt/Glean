@@ -2,10 +2,11 @@ using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
-using System.Reflection.PortableExecutable;
 using Xunit;
+
 using Glean.Providers;
 using Glean.Signatures;
+using Glean.Tests.Utility;
 
 namespace Glean.Tests.Providers;
 
@@ -13,7 +14,7 @@ public class SignatureTypeProviderTests
 {
     private static readonly SignatureTypeProvider Provider = SignatureTypeProvider.Instance;
 
-    // == GetPrimitiveType ======================================================
+    // == GetPrimitiveType ====================================================
 
     [Fact]
     public void GetPrimitiveType_Int32_ReturnsPrimitiveSignatureWithCorrectCode()
@@ -31,13 +32,13 @@ public class SignatureTypeProviderTests
         Assert.Same(a, b);
     }
 
-    // == GetTypeFromDefinition ====================================================
+    // == GetTypeFromDefinition ===============================================
 
     [Fact]
     public void GetTypeFromDefinition_ReturnsTypeDefinitionSignatureWithCorrectIdentity()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(string).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var handle = FindTypeDefinition(reader, "System", "String");
         Assert.False(handle.IsNil, "Could not locate System.String TypeDefinition in CoreLib.");
@@ -48,13 +49,13 @@ public class SignatureTypeProviderTests
         Assert.True(typeDef.Is("System", "String"));
     }
 
-    // == GetTypeFromReference =====================================================
+    // == GetTypeFromReference ================================================
 
     [Fact]
     public void GetTypeFromReference_ReturnsTypeReferenceSignatureWithCorrectIdentity()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(TypeSignature).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenMetadata(typeof(TypeSignature).Assembly);
+        var reader = metadata.Reader;
 
         var handle = FindTypeReference(reader, "System", "Object");
         Assert.False(handle.IsNil, "Could not locate System.Object TypeReference.");
@@ -65,7 +66,7 @@ public class SignatureTypeProviderTests
         Assert.True(typeRef.Is("System", "Object"));
     }
 
-    // == GetSZArrayType ========================================================
+    // == GetSZArrayType ======================================================
 
     [Fact]
     public void GetSZArrayType_WrapsElementType()
@@ -76,7 +77,7 @@ public class SignatureTypeProviderTests
         Assert.Same(elem, szArr.ElementType);
     }
 
-    // == GetArrayType ==========================================================
+    // == GetArrayType ========================================================
 
     [Fact]
     public void GetArrayType_PreservesRankInShape()
@@ -89,7 +90,7 @@ public class SignatureTypeProviderTests
         Assert.Equal(3, arr.Shape.Rank);
     }
 
-    // == GetByReferenceType ====================================================
+    // == GetByReferenceType ==================================================
 
     [Fact]
     public void GetByReferenceType_WrapsElementType()
@@ -100,7 +101,7 @@ public class SignatureTypeProviderTests
         Assert.Same(elem, byRef.ElementType);
     }
 
-    // == GetPointerType ========================================================
+    // == GetPointerType ======================================================
 
     [Fact]
     public void GetPointerType_WrapsElementType()
@@ -111,7 +112,7 @@ public class SignatureTypeProviderTests
         Assert.Same(elem, ptr.ElementType);
     }
 
-    // == GetGenericInstantiation ===============================================
+    // == GetGenericInstantiation =============================================
 
     [Fact]
     public void GetGenericInstantiation_ReturnsGenericInstanceWithArguments()
@@ -129,7 +130,7 @@ public class SignatureTypeProviderTests
         Assert.Same(args[1], genInst.Arguments[1]);
     }
 
-    // == GetGenericTypeParameter ===============================================
+    // == GetGenericTypeParameter =============================================
 
     [Fact]
     public void GetGenericTypeParameter_EmptyContext_ReturnsParameterSignatureAtIndex()
@@ -159,7 +160,7 @@ public class SignatureTypeProviderTests
         Assert.Equal(5, param.Index);
     }
 
-    // == GetGenericMethodParameter ============================================
+    // == GetGenericMethodParameter ===========================================
 
     [Fact]
     public void GetGenericMethodParameter_EmptyContext_ReturnsMethodParameterSignatureAtIndex()
@@ -189,7 +190,7 @@ public class SignatureTypeProviderTests
         Assert.Equal(3, param.Index);
     }
 
-    // == GetPinnedType =========================================================
+    // == GetPinnedType =======================================================
 
     [Fact]
     public void GetPinnedType_WrapsElementType()
@@ -200,7 +201,7 @@ public class SignatureTypeProviderTests
         Assert.Same(elem, pinned.ElementType);
     }
 
-    // == GetSentinelType =======================================================
+    // == GetSentinelType =====================================================
 
     [Fact]
     public void GetSentinelType_ReturnsSingletonInstance()
@@ -208,7 +209,7 @@ public class SignatureTypeProviderTests
         Assert.Same(SentinelTypeSignature.Instance, Provider.GetSentinelType());
     }
 
-    // == GetFunctionPointerType ================================================
+    // == GetFunctionPointerType ==============================================
 
     [Fact]
     public void GetFunctionPointerType_WrapsMethodSignature()
@@ -224,7 +225,7 @@ public class SignatureTypeProviderTests
         Assert.Same(PrimitiveTypeSignature.Get(PrimitiveTypeCode.Void), fp.Signature.ReturnType);
     }
 
-    // == GetModifiedType =======================================================
+    // == GetModifiedType =====================================================
 
     [Fact]
     public void GetModifiedType_Required_OnUnmodifiedType_SetsRequiredModifier()
@@ -301,7 +302,7 @@ public class SignatureTypeProviderTests
         Assert.Same(optMod, Assert.Single(result.OptionalModifiers));
     }
 
-    // == Integration: Real BCL metadata =======================================
+    // == Integration: Real BCL metadata ======================================
 
     private static TypeDefinitionHandle FindTypeDefinition(MetadataReader reader, string ns, string name)
     {
@@ -341,8 +342,8 @@ public class SignatureTypeProviderTests
     [Fact]
     public void Decode_StringContains_ReturnTypeIsPrimitiveBool_ParamIsPrimitiveString()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(string).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var methodInfo = typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) });
         Assert.NotNull(methodInfo);
@@ -359,8 +360,8 @@ public class SignatureTypeProviderTests
     [Fact]
     public void Decode_ListAdd_ParameterIsGenericTypeParameterIndex0()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(List<>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var itemType = typeof(List<>).GetGenericArguments()[0];
         var methodInfo = typeof(List<>).GetMethod("Add", new[] { itemType });
@@ -374,8 +375,8 @@ public class SignatureTypeProviderTests
     [Fact]
     public void Decode_ListAdd_WithIntContext_SubstitutesIntForTypeParameter()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(List<>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var itemType = typeof(List<>).GetGenericArguments()[0];
         var methodInfo = typeof(List<>).GetMethod("Add", new[] { itemType });
@@ -392,8 +393,8 @@ public class SignatureTypeProviderTests
     [Fact]
     public void Decode_DictionaryTryGetValue_OutParamIsRefGenericTypeParameter()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(Dictionary<,>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var genericArgs = typeof(Dictionary<,>).GetGenericArguments();
         var methodInfo = typeof(Dictionary<,>).GetMethod("TryGetValue", new[] { genericArgs[0], genericArgs[1].MakeByRefType() });
@@ -414,8 +415,8 @@ public class SignatureTypeProviderTests
     [Fact]
     public void Decode_ListGetRange_ReturnTypeIsGenericInstanceViaTypeSpec()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(List<>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var methodInfo = typeof(List<>).GetMethod("GetRange", new[] { typeof(int), typeof(int) });
         Assert.NotNull(methodInfo);
@@ -431,8 +432,8 @@ public class SignatureTypeProviderTests
     [Fact]
     public void Decode_ListGetRange_WithIntContext_SubstitutesIntIntoReturnTypeViaTypeSpec()
     {
-        using var pe = new PEReader(File.OpenRead(typeof(List<>).Assembly.Location));
-        var reader = pe.GetMetadataReader();
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
 
         var methodInfo = typeof(List<>).GetMethod("GetRange", new[] { typeof(int), typeof(int) });
         Assert.NotNull(methodInfo);
