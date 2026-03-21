@@ -1,6 +1,5 @@
-using System.Linq;
-using System.Reflection;
 using System.Reflection.Metadata;
+
 using Xunit;
 
 using Glean.Decoding;
@@ -12,6 +11,75 @@ namespace Glean.Tests.Decoding;
 
 public class CustomAttributeDecoderTests
 {
+    private const string LocalAttributeSource = """
+        using System;
+
+        namespace Glean.Tests.Decoding;
+
+        [AttributeUsage(AttributeTargets.Class)]
+        internal sealed class LocalDecoderFixtureAttribute : Attribute
+        {
+            public LocalDecoderFixtureAttribute(int number, string text, string[] names)
+            {
+            }
+
+            public bool Flag;
+
+            public string Note { get; set; } = string.Empty;
+        }
+
+        [LocalDecoderFixture(7, "hello", new[] { "alpha", "beta" }, Flag = true, Note = "named")]
+        internal sealed class LocalAttributedType
+        {
+        }
+        """;
+
+    private const string EmptyAttributeSource = """
+        using System;
+
+        namespace Glean.Tests.Decoding;
+
+        [AttributeUsage(AttributeTargets.Class)]
+        internal sealed class EmptyDecoderFixtureAttribute : Attribute
+        {
+        }
+
+        [EmptyDecoderFixture]
+        internal sealed class EmptyAttributedType
+        {
+        }
+        """;
+
+    private const string FrameworkAttributeSource = """
+        using System;
+
+        namespace Glean.Tests.Decoding;
+
+        [Obsolete("legacy")]
+        internal sealed class FrameworkAttributedType
+        {
+        }
+        """;
+
+    private const string ExternalEnumAttributeSource = """
+        using System;
+
+        namespace Glean.Tests.Decoding;
+
+        [AttributeUsage(AttributeTargets.Class)]
+        internal sealed class ExternalEnumDecoderFixtureAttribute : Attribute
+        {
+            public ExternalEnumDecoderFixtureAttribute(AttributeTargets targets)
+            {
+            }
+        }
+
+        [ExternalEnumDecoderFixture(AttributeTargets.Class)]
+        internal sealed class ExternalEnumAttributedType
+        {
+        }
+        """;
+
     // == Decode ==============================================================
 
     [Fact]
@@ -25,7 +93,7 @@ public class CustomAttributeDecoderTests
     [Fact]
     public void Decode_NilHandle_ThrowsArgumentException()
     {
-        using var metadata = TestUtility.OpenMetadata(typeof(CustomAttributeDecoderTests).Assembly);
+        using var metadata = TestUtility.BuildMetadata(LocalAttributeSource);
 
         var ex = Assert.Throws<ArgumentException>(
             () => CustomAttributeDecoder.Decode(metadata.Reader, default));
@@ -36,12 +104,8 @@ public class CustomAttributeDecoderTests
     [Fact]
     public void Decode_LocalAttributeOnType_ReturnsTypeDefinitionAndDecodedFixedAndNamedArguments()
     {
-        using var metadata = TestUtility.OpenMetadata(typeof(CustomAttributeDecoderTests).Assembly);
-        var targetHandle = FindTypeDefinitionHandle(metadata.Reader, "Glean.Tests.Decoding", "LocalAttributedType");
-        Assert.False(targetHandle.IsNil, "Could not locate LocalAttributedType in test assembly.");
-
-        var targetType = metadata.Reader.GetTypeDefinition(targetHandle);
-        var attributeHandle = Assert.Single(targetType.GetCustomAttributes());
+        using var metadata = TestUtility.BuildMetadata(LocalAttributeSource);
+        var attributeHandle = GetSingleAttributeHandle(metadata, "Glean.Tests.Decoding", "LocalAttributedType");
 
         var decoded = CustomAttributeDecoder.Decode(metadata.Reader, attributeHandle);
 
@@ -81,13 +145,15 @@ public class CustomAttributeDecoderTests
 
         Assert.Equal(2, decoded.NamedArguments.Length);
 
-        var flag = Assert.Single(decoded.NamedArguments.Where(arg => arg.Name == "Flag"));
+        var flag = Assert.Single(
+            decoded.NamedArguments.Where(arg => arg.Name == "Flag"));
         Assert.Equal(CustomAttributeNamedArgumentKind.Field, flag.Kind);
         var flagType = Assert.IsType<PrimitiveTypeSignature>(flag.Type);
         Assert.Equal(PrimitiveTypeCode.Boolean, flagType.TypeCode);
         Assert.True(Assert.IsType<bool>(flag.Value.Value));
 
-        var note = Assert.Single(decoded.NamedArguments.Where(arg => arg.Name == "Note"));
+        var note = Assert.Single(
+            decoded.NamedArguments.Where(arg => arg.Name == "Note"));
         Assert.Equal(CustomAttributeNamedArgumentKind.Property, note.Kind);
         var noteType = Assert.IsType<PrimitiveTypeSignature>(note.Type);
         Assert.Equal(PrimitiveTypeCode.String, noteType.TypeCode);
@@ -97,12 +163,8 @@ public class CustomAttributeDecoderTests
     [Fact]
     public void Decode_LocalAttributeWithoutArguments_ReturnsEmptyFixedAndNamedArguments()
     {
-        using var metadata = TestUtility.OpenMetadata(typeof(CustomAttributeDecoderTests).Assembly);
-        var targetHandle = FindTypeDefinitionHandle(metadata.Reader, "Glean.Tests.Decoding", "EmptyAttributedType");
-        Assert.False(targetHandle.IsNil, "Could not locate EmptyAttributedType in test assembly.");
-
-        var targetType = metadata.Reader.GetTypeDefinition(targetHandle);
-        var attributeHandle = Assert.Single(targetType.GetCustomAttributes());
+        using var metadata = TestUtility.BuildMetadata(EmptyAttributeSource);
+        var attributeHandle = GetSingleAttributeHandle(metadata, "Glean.Tests.Decoding", "EmptyAttributedType");
 
         var decoded = CustomAttributeDecoder.Decode(metadata.Reader, attributeHandle);
 
@@ -115,12 +177,8 @@ public class CustomAttributeDecoderTests
     [Fact]
     public void Decode_FrameworkAttributeOnType_ReturnsTypeReferenceAndFixedArguments()
     {
-        using var metadata = TestUtility.OpenMetadata(typeof(CustomAttributeDecoderTests).Assembly);
-        var targetHandle = FindTypeDefinitionHandle(metadata.Reader, "Glean.Tests.Decoding", "FrameworkAttributedType");
-        Assert.False(targetHandle.IsNil, "Could not locate FrameworkAttributedType in test assembly.");
-
-        var targetType = metadata.Reader.GetTypeDefinition(targetHandle);
-        var attributeHandle = Assert.Single(targetType.GetCustomAttributes());
+        using var metadata = TestUtility.BuildMetadata(FrameworkAttributeSource);
+        var attributeHandle = GetSingleAttributeHandle(metadata, "Glean.Tests.Decoding", "FrameworkAttributedType");
 
         var decoded = CustomAttributeDecoder.Decode(metadata.Reader, attributeHandle);
 
@@ -137,12 +195,8 @@ public class CustomAttributeDecoderTests
     [Fact]
     public void Decode_ExternalEnumArgumentWithoutResolver_ThrowsBadImageFormatException()
     {
-        using var metadata = TestUtility.OpenMetadata(typeof(CustomAttributeDecoderTests).Assembly);
-        var targetHandle = FindTypeDefinitionHandle(metadata.Reader, "Glean.Tests.Decoding", "ExternalEnumAttributedType");
-        Assert.False(targetHandle.IsNil, "Could not locate ExternalEnumAttributedType in test assembly.");
-
-        var targetType = metadata.Reader.GetTypeDefinition(targetHandle);
-        var attributeHandle = Assert.Single(targetType.GetCustomAttributes());
+        using var metadata = TestUtility.BuildMetadata(ExternalEnumAttributeSource);
+        var attributeHandle = GetSingleAttributeHandle(metadata, "Glean.Tests.Decoding", "ExternalEnumAttributedType");
 
         Assert.Throws<BadImageFormatException>(() => CustomAttributeDecoder.Decode(metadata.Reader, attributeHandle));
     }
@@ -150,13 +204,8 @@ public class CustomAttributeDecoderTests
     [Fact]
     public void Decode_ExternalEnumArgumentWithResolver_ReturnsDecodedEnumValue()
     {
-        using var metadata = TestUtility.OpenMetadata(typeof(CustomAttributeDecoderTests).Assembly);
-        var targetHandle = FindTypeDefinitionHandle(metadata.Reader, "Glean.Tests.Decoding", "ExternalEnumAttributedType");
-        Assert.False(targetHandle.IsNil, "Could not locate ExternalEnumAttributedType in test assembly.");
-
-        var targetType = metadata.Reader.GetTypeDefinition(targetHandle);
-        var attributeHandle = Assert.Single(targetType.GetCustomAttributes());
-
+        using var metadata = TestUtility.BuildMetadata(ExternalEnumAttributeSource);
+        var attributeHandle = GetSingleAttributeHandle(metadata, "Glean.Tests.Decoding", "ExternalEnumAttributedType");
         var resolver = new StubEnumResolver(PrimitiveTypeCode.Int32);
 
         var decoded = CustomAttributeDecoder.Decode(metadata.Reader, attributeHandle, resolver);
@@ -170,65 +219,11 @@ public class CustomAttributeDecoderTests
         Assert.True(resolver.LastTypeReference!.Is("System", "AttributeTargets"));
     }
 
-    private static TypeDefinitionHandle FindTypeDefinitionHandle(MetadataReader reader, string ns, string name)
+    private static CustomAttributeHandle GetSingleAttributeHandle(MetadataScope metadata, string ns, string name)
     {
-        foreach (var handle in reader.TypeDefinitions)
-        {
-            var typeDef = reader.GetTypeDefinition(handle);
-            if ((reader.GetString(typeDef.Namespace) == ns) &&
-                (reader.GetString(typeDef.Name) == name))
-            {
-                return handle;
-            }
-        }
-
-        return default;
+        var targetType = metadata.GetTypeDefinition(ns, name);
+        return Assert.Single(targetType.GetCustomAttributes());
     }
-}
-
-[AttributeUsage(AttributeTargets.Class)]
-internal sealed class LocalDecoderFixtureAttribute : Attribute
-{
-    public LocalDecoderFixtureAttribute(int number, string text, string[] names)
-    {
-    }
-
-    public bool Flag;
-
-    public string Note { get; set; } = string.Empty;
-}
-
-[LocalDecoderFixture(7, "hello", new[] { "alpha", "beta" }, Flag = true, Note = "named")]
-internal sealed class LocalAttributedType
-{
-}
-
-[AttributeUsage(AttributeTargets.Class)]
-internal sealed class EmptyDecoderFixtureAttribute : Attribute
-{
-}
-
-[EmptyDecoderFixture]
-internal sealed class EmptyAttributedType
-{
-}
-
-[Obsolete("legacy")]
-internal sealed class FrameworkAttributedType
-{
-}
-
-[AttributeUsage(AttributeTargets.Class)]
-internal sealed class ExternalEnumDecoderFixtureAttribute : Attribute
-{
-    public ExternalEnumDecoderFixtureAttribute(AttributeTargets targets)
-    {
-    }
-}
-
-[ExternalEnumDecoderFixture(AttributeTargets.Class)]
-internal sealed class ExternalEnumAttributedType
-{
 }
 
 internal sealed class StubEnumResolver : IEnumResolver
