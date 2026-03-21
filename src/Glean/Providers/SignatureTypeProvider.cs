@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.ComponentModel;
 using System.Reflection.Metadata;
 
 using Glean.Signatures;
@@ -14,7 +13,6 @@ namespace Glean.Providers;
 /// Primitive signatures are reused via singletons where possible, but most non primitive
 /// decode paths allocate signature objects (arrays, generic instantiations, modifiers, etc.).
 /// </remarks>
-[EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class SignatureTypeProvider : ISignatureTypeProvider<TypeSignature, SignatureDecodeContext>
 {
     /// <summary>

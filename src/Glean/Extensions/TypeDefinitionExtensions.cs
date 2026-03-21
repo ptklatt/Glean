@@ -340,6 +340,61 @@ public static class TypeDefinitionExtensions
     // == Metadata access =====================================================
 
     /// <summary>
+    /// Gets implemented interfaces decoded as TypeSignatures.
+    /// Uses Signatures infrastructure for advanced type analysis.
+    /// Decoding each interface signature may allocate.
+    /// </summary>
+    /// <remarks>
+    /// Rich tier: each enumerated item is a decoded <see cref="Signatures.TypeSignature"/> and allocates.
+    /// For fast tier (handle only) interface enumeration, use <see cref="GetImplementedInterfaceTypes"/> instead.
+    /// </remarks>
+    public static Enumerators.InterfaceEnumerator GetImplementedInterfaces(
+        this TypeDefinition type,
+        MetadataReader reader)
+    {
+        var provider = Providers.SignatureTypeProvider.Instance;
+        var genericContext = Providers.SignatureDecodeContext.Empty;
+
+        return Enumerators.InterfaceEnumerator.Create(
+            reader,
+            type.GetInterfaceImplementations(),
+            provider,
+            genericContext);
+    }
+
+    /// <summary>
+    /// Gets implemented interfaces decoded as TypeSignatures with a custom provider.
+    /// Decoding each interface signature may allocate.
+    /// </summary>
+    /// <remarks>
+    /// Rich tier: each enumerated item is a decoded <see cref="Signatures.TypeSignature"/> and allocates.
+    /// For fast tier (handle only) interface enumeration, use <see cref="GetImplementedInterfaceTypes"/> instead.
+    /// </remarks>
+    public static Enumerators.InterfaceEnumerator GetImplementedInterfaces(
+        this TypeDefinition type,
+        MetadataReader reader,
+        ISignatureTypeProvider<Signatures.TypeSignature, Providers.SignatureDecodeContext> provider,
+        Providers.SignatureDecodeContext genericContext)
+    {
+        return Enumerators.InterfaceEnumerator.Create(
+            reader,
+            type.GetInterfaceImplementations(),
+            provider,
+            genericContext);
+    }
+
+    /// <summary>
+    /// Gets implemented interface type handles without decoding signatures.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Enumerators.InterfaceTypeHandleEnumerator GetImplementedInterfaceTypes(
+        this TypeDefinition type,
+        MetadataReader reader)
+    {
+        return Enumerators.InterfaceTypeHandleEnumerator.Create(reader, type.GetInterfaceImplementations());
+    }
+    
+    /// <summary>
     /// Checks whether the type directly implements the specified interface without decoding signatures.
     /// This is a fast path intended for direct System.Reflection.Metadata parity scenarios.
     /// </summary>
