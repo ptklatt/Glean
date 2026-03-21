@@ -25,7 +25,7 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
 
     private StringTypeProvider() { }
 
-    // Primitive types
+    // == Primitive types =====================================================
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -52,7 +52,7 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
         _                                => typeCode.ToString()
     };
 
-    // Array types
+    // == Array types =========================================================
 
     /// <inheritdoc/>
     public string GetSZArrayType(string elementType) => $"{elementType}[]";
@@ -75,7 +75,7 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
         return sb.ToString();
     }
 
-    // Reference and pointer types
+    // == Reference and pointer types =========================================
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -89,7 +89,7 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string GetPinnedType(string elementType) => elementType;
 
-    // Generic types
+    // == Generic types =======================================================
 
     /// <inheritdoc/>
     public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments)
@@ -116,7 +116,7 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string GetGenericMethodParameter(int genericContext, int index) => $"TM{index}";
 
-    // Type references
+    // == Type references =====================================================
 
     /// <inheritdoc/>
     public string GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
@@ -143,14 +143,14 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
         return typeSpec.DecodeSignature(this, genericContext);
     }
 
-    // Modified types
+    // == Modified types ======================================================
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string GetModifiedType(string modifier, string unmodifiedType, bool isRequired)
         => unmodifiedType;
 
-    // Function pointers
+    // == Function pointers ===================================================
 
     /// <inheritdoc/>
     public string GetFunctionPointerType(MethodSignature<string> signature)
@@ -166,7 +166,7 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
         return sb.ToString();
     }
 
-    // Custom attribute provider
+    // == Custom attribute provider ===========================================
 
     /// <inheritdoc/>
     public string GetSystemType() => "System.Type";
@@ -180,7 +180,7 @@ public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, IC
     /// <inheritdoc/>
     public PrimitiveTypeCode GetUnderlyingEnumType(string type) => PrimitiveTypeCode.Int32;
 
-    // Helpers
+    // == Helpers =============================================================
 
     /// <summary>
     /// Formats a method signature as a readable string.
