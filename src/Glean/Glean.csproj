@@ -12,6 +12,7 @@
 
     <ItemGroup>
       <Folder Include="Decoding\" />
+      <Folder Include="Extensions\" />
     </ItemGroup>
 
 </Project>

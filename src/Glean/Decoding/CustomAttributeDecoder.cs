@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Reflection.Metadata;
 
 using Glean.Providers;
+using Glean.Resolution;
 using Glean.Signatures;
 
 namespace Glean.Decoding;
@@ -27,7 +28,7 @@ public static class CustomAttributeDecoder
 
         var attribute = reader.GetCustomAttribute(handle);
 
-        var attributeType = DecodeAttributeType(reader, attribute.Constructor);
+        var attributeType = CustomAttributeTypeResolver.GetAttributeType(reader, attribute.Constructor);
 
         var provider = new CustomAttributeTypeProvider(reader, enumResolver);
         var value = attribute.DecodeValue(provider);
@@ -36,27 +37,6 @@ public static class CustomAttributeDecoder
         var namedArgs = ConvertNamedArguments(value.NamedArguments);
 
         return new DecodedCustomAttribute(attributeType, fixedArgs, namedArgs);
-    }
-
-    private static TypeSignature DecodeAttributeType(MetadataReader reader, EntityHandle constructor)
-    {
-        EntityHandle typeHandle = constructor.Kind switch
-        {
-            HandleKind.MethodDefinition =>
-                reader.GetMethodDefinition((MethodDefinitionHandle)constructor).GetDeclaringType(),
-
-            HandleKind.MemberReference =>
-                reader.GetMemberReference((MemberReferenceHandle)constructor).Parent,
-
-            _ => throw new BadImageFormatException($"Unexpected attribute constructor handle kind: {constructor.Kind}")
-        };
-
-        return typeHandle.Kind switch
-        {
-            HandleKind.TypeDefinition => new TypeDefinitionSignature(reader, (TypeDefinitionHandle)typeHandle),
-            HandleKind.TypeReference => new TypeReferenceSignature(reader, (TypeReferenceHandle)typeHandle),
-            _ => throw new BadImageFormatException($"Unexpected attribute type handle kind: {typeHandle.Kind}")
-        };
     }
 
     private static ImmutableArray<DecodedCustomAttributeArgument> ConvertFixedArguments(
