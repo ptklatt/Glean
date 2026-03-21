@@ -2,6 +2,10 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 
+using Glean.Enumerators;
+using Glean.Providers;
+using Glean.Signatures;
+
 namespace Glean.Extensions;
 
 /// <summary>
@@ -86,5 +90,48 @@ public static class GenericParameterExtensions
     public static GenericParameterConstraintHandleCollection GetConstraintHandles(this GenericParameter genericParameter)
     {
         return genericParameter.GetConstraints();
+    }
+
+    /// <summary>
+    /// Gets generic constraint type handles without decoding signatures.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static GenericConstraintHandleEnumerator GetConstraintTypes(this GenericParameter genericParameter, MetadataReader reader)
+    {
+        return GenericConstraintHandleEnumerator.Create(reader, genericParameter.GetConstraints());
+    }
+
+    /// <summary>
+    /// Gets generic parameter constraints decoded as TypeSignatures.
+    /// Uses Signatures infrastructure for advanced type analysis.
+    /// Decoding each constraint signature may allocate.
+    /// </summary>
+    public static GenericConstraintEnumerator GetConstraintSignatures(this GenericParameter genericParameter, MetadataReader reader)
+    {
+        var provider = SignatureTypeProvider.Instance;
+        var genericContext = SignatureDecodeContext.Empty;
+
+        return GenericConstraintEnumerator.Create(
+            reader,
+            genericParameter.GetConstraints(),
+            provider,
+            genericContext);
+    }
+    
+    /// <summary>
+    /// Gets generic parameter constraints decoded as TypeSignatures with a custom provider.
+    /// Decoding each constraint signature may allocate.
+    /// </summary>
+    public static GenericConstraintEnumerator GetConstraintSignatures(
+        this GenericParameter genericParameter,
+        MetadataReader reader,
+        ISignatureTypeProvider<Signatures.TypeSignature, Providers.SignatureDecodeContext> provider,
+        Providers.SignatureDecodeContext genericContext)
+    {
+        return GenericConstraintEnumerator.Create(
+            reader,
+            genericParameter.GetConstraints(),
+            provider,
+            genericContext);
     }
 }

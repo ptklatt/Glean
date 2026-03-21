@@ -1,8 +1,11 @@
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 
 using Xunit;
 
 using Glean.Extensions;
+using Glean.Providers;
+using Glean.Signatures;
 using Glean.Tests.Utility;
 
 namespace Glean.Tests.Extensions;
@@ -33,6 +36,20 @@ public class GenericParameterExtensionsTests
         {
             internal void MethodWithConstraint<TMethod>()
                 where TMethod : class, IComparable<int>, new()
+            {
+            }
+        }
+        """;
+
+    private const string GenericParameterContextSource = """
+        using System.Collections.Generic;
+
+        namespace Glean.Tests.Extensions;
+
+        internal sealed class GenericContextFixture<TOuter>
+        {
+            internal void MethodWithSubstitutedConstraint<TMethod>()
+                where TMethod : IEnumerable<TOuter>
             {
             }
         }
@@ -126,6 +143,83 @@ public class GenericParameterExtensionsTests
         Assert.True(methodParameter.NameIs(metadata.Reader, "TMethod"));
         Assert.False(methodParameter.NameIs(metadata.Reader, "TReference"));
         Assert.Equal(1, CountConstraintHandles(methodParameter.GetConstraintHandles()));
+    }
+
+    [Fact]
+    public void MetadataAccess_ConstraintSignatures_ReportExpectedDecodedTypes()
+    {
+        using var metadata = TestUtility.BuildMetadata(GenericParameterSource);
+
+        var typeParameter = GetTypeGenericParameter(
+            metadata,
+            "Glean.Tests.Extensions",
+            "GenericParameterFixture`3",
+            "TReference");
+        var enumerator = typeParameter.GetConstraintSignatures(metadata.Reader);
+
+        Assert.True(enumerator.MoveNext());
+        var first = Assert.IsType<TypeReferenceSignature>(enumerator.Current);
+        Assert.True(first.Is("System", "IDisposable"));
+
+        Assert.True(enumerator.MoveNext());
+        var second = Assert.IsType<GenericInstanceSignature>(enumerator.Current);
+        Assert.True(second.Is("System.Collections.Generic", "IEnumerable`1"));
+
+        var argument = Assert.IsType<PrimitiveTypeSignature>(Assert.Single(second.Arguments));
+        Assert.Equal(PrimitiveTypeCode.Int32, argument.TypeCode);
+
+        Assert.False(enumerator.MoveNext());
+    }
+
+    [Fact]
+    public void MetadataAccess_ConstraintTypes_ReportExpectedHandlesAndConstraintRows()
+    {
+        using var metadata = TestUtility.BuildMetadata(GenericParameterSource);
+        var reader = metadata.Reader;
+
+        var typeParameter = GetTypeGenericParameter(
+            metadata,
+            "Glean.Tests.Extensions",
+            "GenericParameterFixture`3",
+            "TReference");
+        var enumerator = typeParameter.GetConstraintTypes(reader);
+
+        Assert.True(enumerator.MoveNext());
+        Assert.Equal(HandleKind.TypeReference, enumerator.Current.Kind);
+        Assert.Equal(enumerator.Current,
+                     reader.GetGenericParameterConstraint(enumerator.ConstraintHandle).Type);
+
+        Assert.True(enumerator.MoveNext());
+        Assert.Equal(HandleKind.TypeSpecification, enumerator.Current.Kind);
+        Assert.Equal(enumerator.Current,
+                     reader.GetGenericParameterConstraint(enumerator.ConstraintHandle).Type);
+
+        Assert.False(enumerator.MoveNext());
+    }
+
+    [Fact]
+    public void MetadataAccess_ConstraintSignaturesWithCustomContext_SubstitutesTypeArguments()
+    {
+        using var metadata = TestUtility.BuildMetadata(GenericParameterContextSource);
+
+        var methodParameter = GetMethodGenericParameter(
+            metadata,
+            "Glean.Tests.Extensions",
+            "GenericContextFixture`1",
+            "MethodWithSubstitutedConstraint",
+            "TMethod");
+        var int32 = PrimitiveTypeSignature.Get(PrimitiveTypeCode.Int32);
+        var context = new SignatureDecodeContext(typeArguments: ImmutableArray.Create<TypeSignature>(int32));
+        var enumerator = methodParameter.GetConstraintSignatures(
+            metadata.Reader,
+            SignatureTypeProvider.Instance,
+            context);
+
+        Assert.True(enumerator.MoveNext());
+        var constraint = Assert.IsType<GenericInstanceSignature>(enumerator.Current);
+        Assert.True(constraint.Is("System.Collections.Generic", "IEnumerable`1"));
+        Assert.Same(int32, Assert.Single(constraint.Arguments));
+        Assert.False(enumerator.MoveNext());
     }
 
     private static GenericParameter GetTypeGenericParameter(
