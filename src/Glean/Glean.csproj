@@ -12,7 +12,9 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Folder Include="Contexts\" />
       <Folder Include="Decoding\" />
+      <Folder Include="Enumerators\" />
       <Folder Include="Extensions\" />
     </ItemGroup>
 
