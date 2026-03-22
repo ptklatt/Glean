@@ -18,7 +18,7 @@ public readonly struct AssemblyContext : IEquatable<AssemblyContext>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static AssemblyContext Create(MetadataReader reader)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (!reader.IsAssembly) { throw new ArgumentException("MetadataReader does not represent an assembly.", nameof(reader)); }
 
         return new AssemblyContext(reader, reader.GetAssemblyDefinition());

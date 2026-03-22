@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 
+using Glean.Internal;
+
 namespace Glean.Extensions;
 
 /// <summary>
@@ -20,7 +22,7 @@ public static class AssemblyDefinitionExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsReferenceAssembly(this AssemblyDefinition assembly, MetadataReader reader)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
 
         return assembly.GetCustomAttributes()
             .TryFindAttribute(reader, WellKnownTypes.SystemRuntimeCompilerServicesNs, "ReferenceAssemblyAttribute", out _);
@@ -78,7 +80,7 @@ public static class AssemblyDefinitionExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string GetName(this AssemblyDefinition assembly, MetadataReader reader)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
 
         return reader.GetString(assembly.Name);
     }
@@ -89,7 +91,7 @@ public static class AssemblyDefinitionExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string GetCulture(this AssemblyDefinition assembly, MetadataReader reader)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (assembly.Culture.IsNil) { return string.Empty; }
 
         return reader.GetString(assembly.Culture);
@@ -101,7 +103,7 @@ public static class AssemblyDefinitionExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] GetPublicKey(this AssemblyDefinition assembly, MetadataReader reader)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (assembly.PublicKey.IsNil) { return Array.Empty<byte>(); }
 
         return reader.GetBlobBytes(assembly.PublicKey);
@@ -116,7 +118,7 @@ public static class AssemblyDefinitionExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe ReadOnlySpan<byte> GetPublicKeySpan(this AssemblyDefinition assembly, MetadataReader reader)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (assembly.PublicKey.IsNil) { return ReadOnlySpan<byte>.Empty; }
 
         var blobReader = reader.GetBlobReader(assembly.PublicKey);
@@ -129,7 +131,7 @@ public static class AssemblyDefinitionExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool NameIs(this AssemblyDefinition assembly, MetadataReader reader, string name)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
 
         return reader.StringComparer.Equals(assembly.Name, name);
     }

@@ -18,7 +18,7 @@ public abstract class TypeSignature : IEquatable<TypeSignature>
 
     /// <summary>
     /// Checks if this type signature matches the specified namespace and name.
-    /// Zero allocation identity check.
+    /// Metadata backed implementations use handle based comparisons where possible.
     /// </summary>
     /// <param name="ns">The namespace to match (use empty string for no namespace).</param>
     /// <param name="name">The type name to match.</param>

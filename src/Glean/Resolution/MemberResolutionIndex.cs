@@ -15,9 +15,9 @@ namespace Glean.Resolution;
 /// </remarks>
 public sealed class MemberResolutionIndex
 {
-    private static readonly MethodDefinitionHandle[] EmptyMethodCandidates = Array.Empty<MethodDefinitionHandle>();
-    private static readonly MethodShapeCandidate[] EmptyMethodShapeCandidates = Array.Empty<MethodShapeCandidate>();
-    private static readonly FieldDefinitionHandle[] EmptyFieldCandidates = Array.Empty<FieldDefinitionHandle>();
+    private static readonly MethodDefinitionHandle[] EmptyMethodCandidates      = Array.Empty<MethodDefinitionHandle>();
+    private static readonly MethodShapeCandidate[]   EmptyMethodShapeCandidates = Array.Empty<MethodShapeCandidate>();
+    private static readonly FieldDefinitionHandle[]  EmptyFieldCandidates       = Array.Empty<FieldDefinitionHandle>();
 
     private readonly Dictionary<(MetadataReader Reader, int TypeRow),      TypeMemberIndex>                _typeIndex = new();
     private readonly Dictionary<(MetadataReader Reader, int MemberRefRow), MethodSignatureShape>           _memberReferenceMethodShapes = new();

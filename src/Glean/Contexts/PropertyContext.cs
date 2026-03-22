@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 
 using Glean.Enumerators;
 using Glean.Extensions;
+using Glean.Internal;
 
 namespace Glean.Contexts;
 
@@ -28,7 +29,7 @@ public readonly struct PropertyContext : IEquatable<PropertyContext>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static PropertyContext Create(MetadataReader reader, PropertyDefinitionHandle handle)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) {throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new PropertyContext(reader, handle, reader.GetPropertyDefinition(handle));

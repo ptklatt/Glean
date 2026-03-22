@@ -20,7 +20,7 @@ public readonly struct ParameterContext : IEquatable<ParameterContext>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ParameterContext Create(MetadataReader reader, ParameterHandle handle)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new ParameterContext(reader, handle, reader.GetParameter(handle), default);
@@ -29,7 +29,7 @@ public readonly struct ParameterContext : IEquatable<ParameterContext>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static ParameterContext Create(MetadataReader reader, ParameterHandle handle, MethodDefinitionHandle declaringMethod)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new ParameterContext(reader, handle, reader.GetParameter(handle), declaringMethod);

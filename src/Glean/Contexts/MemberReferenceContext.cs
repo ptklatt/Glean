@@ -15,7 +15,7 @@ public readonly struct MemberReferenceContext : IEquatable<MemberReferenceContex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MemberReferenceContext Create(MetadataReader reader, MemberReferenceHandle handle)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new MemberReferenceContext(reader, handle, reader.GetMemberReference(handle));

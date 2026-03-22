@@ -7,13 +7,13 @@ internal static class TypeSpecificationSignatureDecoder
 {
     // TypeDefOrRef coded indexes use the low 2 bits as the tag.
     private const int TypeDefOrRefTagBitCount = 2;
-    private const int TypeDefOrRefTagMask = 0x3;
-    private const int TypeDefinitionTag = 0;
-    private const int TypeReferenceTag = 1;
-    private const int TypeSpecificationTag = 2;
+    private const int TypeDefOrRefTagMask     = 0x3;
+    private const int TypeDefinitionTag       = 0;
+    private const int TypeReferenceTag        = 1;
+    private const int TypeSpecificationTag    = 2;
 
     private const byte ElementTypeValueType = 0x11;
-    private const byte ElementTypeClass = 0x12;
+    private const byte ElementTypeClass     = 0x12;
 
     public static bool TryGetGenericTypeDefinitionHandle(
         MetadataReader reader,

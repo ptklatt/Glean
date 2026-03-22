@@ -13,7 +13,7 @@ internal readonly struct AssemblyIdentityKey : IEquatable<AssemblyIdentityKey>
 
     // Public key tokens are 8 bytes. Full public keys are hashed with SHA1.
     private const int PublicKeyTokenSizeBytes = 8;
-    private const int Sha1HashSizeBytes = 20;
+    private const int Sha1HashSizeBytes       = 20;
 
     public AssemblyIdentityKey(string name, Version version, string culture, bool hasPublicKeyToken, ulong publicKeyToken)
     {

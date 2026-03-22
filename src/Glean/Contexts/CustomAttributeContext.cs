@@ -15,7 +15,7 @@ public readonly struct CustomAttributeContext : IEquatable<CustomAttributeContex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static CustomAttributeContext Create(MetadataReader reader, CustomAttributeHandle handle)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new CustomAttributeContext(reader, handle, reader.GetCustomAttribute(handle));

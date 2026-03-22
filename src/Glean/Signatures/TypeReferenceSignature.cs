@@ -44,6 +44,7 @@ public sealed class TypeReferenceSignature : TypeSignature
             {
                 HandleKind.AssemblyReference => _reader.GetString(_reader.GetAssemblyReference((AssemblyReferenceHandle)_resolutionScope).Name),
                 HandleKind.ModuleReference   => _reader.GetString(_reader.GetModuleReference((ModuleReferenceHandle)_resolutionScope).Name),
+                HandleKind.ModuleDefinition  => _reader.GetString(_reader.GetModuleDefinition().Name),
                 HandleKind.TypeReference     => GetTypeReferenceName((TypeReferenceHandle)_resolutionScope),
                 _ => null
             };
@@ -55,8 +56,8 @@ public sealed class TypeReferenceSignature : TypeSignature
     private string? GetTypeReferenceName(TypeReferenceHandle handle)
     {
         var typeRef = _reader.GetTypeReference(handle);
-        var ns             = _reader.GetString(typeRef.Namespace);
-        var name                = _reader.GetString(typeRef.Name);
+        var ns = _reader.GetString(typeRef.Namespace);
+        var name = _reader.GetString(typeRef.Name);
         return string.IsNullOrEmpty(ns) ? name : $"{ns}.{name}";
     }
 
@@ -80,22 +81,51 @@ public sealed class TypeReferenceSignature : TypeSignature
     public override bool Is(string ns, string name, string? scope = null)
     {
         var typeRef = _reader.GetTypeReference(_handle);
-        var actualNs       = _reader.GetString(typeRef.Namespace);
-        var actualName          = _reader.GetString(typeRef.Name);
-
-        if (!string.Equals(actualNs, ns, StringComparison.Ordinal) ||
-            !string.Equals(actualName, name, StringComparison.Ordinal))
+        if (!_reader.StringComparer.Equals(typeRef.Namespace, ns) ||
+            !_reader.StringComparer.Equals(typeRef.Name, name))
         {
             return false;
         }
 
-        // If scope is specified, check resolution scope
-        if (scope != null)
+        if (scope == null)
         {
-            return string.Equals(ResolutionScopeName, scope, StringComparison.Ordinal);
+            return true;
         }
 
-        return true;
+        switch (_resolutionScope.Kind)
+        {
+            case HandleKind.AssemblyReference:
+                return _reader.StringComparer.Equals(
+                    _reader.GetAssemblyReference((AssemblyReferenceHandle)_resolutionScope).Name,
+                    scope);
+
+            case HandleKind.ModuleReference:
+                return _reader.StringComparer.Equals(
+                    _reader.GetModuleReference((ModuleReferenceHandle)_resolutionScope).Name,
+                    scope);
+
+            case HandleKind.ModuleDefinition:
+                if (_reader.StringComparer.Equals(_reader.GetModuleDefinition().Name, scope))
+                {
+                    return true;
+                }
+
+                if (_reader.IsAssembly)
+                {
+                    return _reader.StringComparer.Equals(_reader.GetAssemblyDefinition().Name, scope);
+                }
+
+                return false;
+
+            case HandleKind.TypeReference:
+                return string.Equals(
+                    GetTypeReferenceName((TypeReferenceHandle)_resolutionScope),
+                    scope,
+                    StringComparison.Ordinal);
+
+            default:
+                return false;
+        }
     }
 
     public override bool Equals(TypeSignature? other)
@@ -123,8 +153,8 @@ public sealed class TypeReferenceSignature : TypeSignature
     public override void FormatTo(StringBuilder sb)
     {
         var typeRef = _reader.GetTypeReference(_handle);
-        var ns             = _reader.GetString(typeRef.Namespace);
-        var name                = _reader.GetString(typeRef.Name);
+        var ns = _reader.GetString(typeRef.Namespace);
+        var name = _reader.GetString(typeRef.Name);
 
         if (!string.IsNullOrEmpty(ns))
         {

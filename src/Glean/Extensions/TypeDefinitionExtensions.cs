@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 
+using Glean.Internal;
+
 // Disable obsolete warning for enums as this is a usability extension
 #pragma warning disable SYSLIB0050
 
@@ -133,7 +135,7 @@ public static class TypeDefinitionExtensions
     /// <returns>True if the type inherits from System.ValueType or System.Enum.</returns>
     public static bool IsValueType(this TypeDefinition type, MetadataReader reader)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
 
         // System.ValueType and System.Enum are reference types.
         if (reader.StringComparer.Equals(type.Namespace, WellKnownTypes.SystemNs) && 

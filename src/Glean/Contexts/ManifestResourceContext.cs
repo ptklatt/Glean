@@ -16,7 +16,7 @@ public readonly struct ManifestResourceContext : IEquatable<ManifestResourceCont
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ManifestResourceContext Create(MetadataReader reader, ManifestResourceHandle handle)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new ManifestResourceContext(reader, handle, reader.GetManifestResource(handle));

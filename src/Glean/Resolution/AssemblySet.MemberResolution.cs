@@ -13,7 +13,7 @@ namespace Glean.Resolution;
 public sealed partial class AssemblySet
 {
     private const int MethodDefinitionHandleFlag = int.MinValue;
-    private const int MemberHandleRowMask = int.MaxValue;
+    private const int MemberHandleRowMask        = int.MaxValue;
 
     /// <summary>
     /// Resolves a member reference with a <see cref="MemberResolutionIndex"/> for candidate narrowing.

@@ -3,6 +3,8 @@ using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Text;
 
+using Glean.Internal;
+
 namespace Glean.Signatures;
 
 /// <summary>

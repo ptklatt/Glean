@@ -22,7 +22,7 @@ namespace Glean.Resolution;
 /// </remarks>
 public sealed partial class AssemblySet : IDisposable
 {
-    private const int FirstMetadataRowId = 1;
+    private const int FirstMetadataRowId     = 1;
     private const int MaxForwarderChainDepth = 64;
 
     // Pre registered readers keyed by full assembly identity.

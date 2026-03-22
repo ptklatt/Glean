@@ -2,6 +2,8 @@ using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Text;
 
+using Glean.Internal;
+
 namespace Glean.Signatures;
 
 /// <summary>
@@ -54,11 +56,18 @@ public sealed class TypeDefinitionSignature : TypeSignature
             if (baseType.Kind == HandleKind.TypeReference)
             {
                 var typeRef = _reader.GetTypeReference((TypeReferenceHandle)baseType);
-                var ns             = _reader.GetString(typeRef.Namespace);
-                var name                = _reader.GetString(typeRef.Name);
+                var ns = _reader.GetString(typeRef.Namespace);
+                var name = _reader.GetString(typeRef.Name);
 
                 _isValueType = string.Equals(ns, WellKnownTypes.SystemNs, StringComparison.Ordinal) &&
                               ((name == WellKnownTypes.ValueType) || (name == WellKnownTypes.Enum));
+            }
+            else if (baseType.Kind == HandleKind.TypeDefinition)
+            {
+                var typeDefinition = _reader.GetTypeDefinition((TypeDefinitionHandle)baseType);
+                _isValueType = _reader.StringComparer.Equals(typeDefinition.Namespace, WellKnownTypes.SystemNs) &&
+                               (_reader.StringComparer.Equals(typeDefinition.Name, WellKnownTypes.ValueType) ||
+                                _reader.StringComparer.Equals(typeDefinition.Name, WellKnownTypes.Enum));
             }
             else
             {
@@ -73,11 +82,23 @@ public sealed class TypeDefinitionSignature : TypeSignature
     public override bool Is(string ns, string name, string? scope = null)
     {
         var typeDef = _reader.GetTypeDefinition(_handle);
-        var actualNs       = _reader.GetString(typeDef.Namespace);
-        var actualName          = _reader.GetString(typeDef.Name);
+        if (!_reader.StringComparer.Equals(typeDef.Namespace, ns) ||
+            !_reader.StringComparer.Equals(typeDef.Name, name))
+        {
+            return false;
+        }
 
-        return string.Equals(actualNs, ns, StringComparison.Ordinal) &&
-               string.Equals(actualName, name, StringComparison.Ordinal);
+        if (scope == null)
+        {
+            return true;
+        }
+
+        if (_reader.IsAssembly && _reader.StringComparer.Equals(_reader.GetAssemblyDefinition().Name, scope))
+        {
+            return true;
+        }
+
+        return _reader.StringComparer.Equals(_reader.GetModuleDefinition().Name, scope);
     }
 
     public override bool Equals(TypeSignature? other)
@@ -88,8 +109,8 @@ public sealed class TypeDefinitionSignature : TypeSignature
     public override void FormatTo(StringBuilder sb)
     {
         var typeDef = _reader.GetTypeDefinition(_handle);
-        var ns             = _reader.GetString(typeDef.Namespace);
-        var name                = _reader.GetString(typeDef.Name);
+        var ns = _reader.GetString(typeDef.Namespace);
+        var name = _reader.GetString(typeDef.Name);
 
         if (!string.IsNullOrEmpty(ns))
         {

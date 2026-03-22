@@ -16,7 +16,7 @@ public readonly struct ExportedTypeContext : IEquatable<ExportedTypeContext>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ExportedTypeContext Create(MetadataReader reader, ExportedTypeHandle handle)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new ExportedTypeContext(reader, handle, reader.GetExportedType(handle));

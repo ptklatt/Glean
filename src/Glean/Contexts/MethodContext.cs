@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 
 using Glean.Enumerators;
 using Glean.Extensions;
+using Glean.Internal;
 using Glean.Providers;
 using Glean.Signatures;
 
@@ -25,7 +26,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MethodContext Create(MetadataReader reader, MethodDefinitionHandle handle)
     {
-        if (reader is null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
         if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
 
         return new MethodContext(reader, handle, reader.GetMethodDefinition(handle));

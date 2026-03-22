@@ -1,4 +1,4 @@
-namespace Glean;
+namespace Glean.Internal;
 
 /// <summary>
 /// Namespace and type name constants for well known framework types.

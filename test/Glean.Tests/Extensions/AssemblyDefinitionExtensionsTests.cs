@@ -126,8 +126,8 @@ public class AssemblyDefinitionExtensionsTests
         metadata.AddAssembly(
             metadata.GetOrAddString(assemblyName),
             new Version(1, 2, 3, 4),
-            culture is null ? default : metadata.GetOrAddString(culture),
-            publicKey is null ? default : metadata.GetOrAddBlob(publicKey),
+            culture == null ? default : metadata.GetOrAddString(culture),
+            publicKey == null ? default : metadata.GetOrAddBlob(publicKey),
             flags,
             AssemblyHashAlgorithm.Sha256);
         metadata.AddTypeDefinition(
