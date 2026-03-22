@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 
+using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
@@ -59,6 +60,31 @@ internal sealed class TestAssemblyBuilder
         ArgumentNullException.ThrowIfNull(assemblyPath);
 
         _references.Add(MetadataReference.CreateFromFile(assemblyPath));
+        return this;
+    }
+
+    internal TestAssemblyBuilder WithReference(string assemblyPath, params string[] aliases)
+    {
+        ArgumentNullException.ThrowIfNull(assemblyPath);
+        ArgumentNullException.ThrowIfNull(aliases);
+
+        MetadataReferenceProperties properties = MetadataReferenceProperties.Assembly;
+        if (aliases.Length > 0)
+        {
+            properties = properties.WithAliases(ImmutableArray.CreateRange(aliases));
+        }
+
+        _references.Add(MetadataReference.CreateFromFile(assemblyPath, properties: properties));
+        return this;
+    }
+
+    internal TestAssemblyBuilder WithModuleReference(string modulePath)
+    {
+        ArgumentNullException.ThrowIfNull(modulePath);
+
+        _references.Add(MetadataReference.CreateFromFile(
+            modulePath,
+            properties: MetadataReferenceProperties.Module));
         return this;
     }
 

@@ -34,10 +34,7 @@ public static class SignatureInspector
     /// nil or malformed.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool TryGetPropertyParameterCount(
-        MetadataReader reader,
-        BlobHandle signatureBlob,
-        out int parameterCount)
+    public static bool TryGetPropertyParameterCount(MetadataReader reader, BlobHandle signatureBlob, out int parameterCount)
     {
         if (signatureBlob.IsNil)
         {
@@ -72,7 +69,7 @@ public static class SignatureInspector
     /// The <see cref="SignatureTypeCode"/> of the leading type. Common values:
     /// <list type="bullet">
     ///   <item><c>Class</c> or <c>ValueType</c>: named type</item>
-    ///   <item><see cref="SignatureTypeCode.GenericTypeInstance"/>: generic instantiation — follow with <see cref="TryGetGenericInstanceArity"/></item>
+    ///   <item><see cref="SignatureTypeCode.GenericTypeInstance"/>: generic instantiation - follow with <see cref="TryGetGenericInstanceArity"/></item>
     ///   <item><see cref="SignatureTypeCode.SZArray"/> or <see cref="SignatureTypeCode.Array"/>: array type</item>
     ///   <item><see cref="SignatureTypeCode.ByReference"/>: byref type</item>
     ///   <item><see cref="SignatureTypeCode.Pointer"/>: pointer type</item>
@@ -103,10 +100,7 @@ public static class SignatureInspector
     /// was successfully read; <see langword="false"/> if the blob is nil, does not start with
     /// <c>GENERICINST</c>, or is malformed.
     /// </returns>
-    public static bool TryGetGenericInstanceArity(
-        MetadataReader reader,
-        BlobHandle typeSignatureBlob,
-        out int arity)
+    public static bool TryGetGenericInstanceArity(MetadataReader reader, BlobHandle typeSignatureBlob, out int arity)
     {
         if (typeSignatureBlob.IsNil)
         {

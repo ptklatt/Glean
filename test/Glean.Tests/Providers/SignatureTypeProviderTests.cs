@@ -47,6 +47,21 @@ public class SignatureTypeProviderTests
         var typeDef = Assert.IsType<TypeDefinitionSignature>(sig);
         Assert.Equal(TypeSignatureKind.TypeDefinition, typeDef.Kind);
         Assert.True(typeDef.Is("System", "String"));
+        Assert.True(typeDef.Is("System", "String", reader.GetString(reader.GetAssemblyDefinition().Name)));
+    }
+
+    [Fact]
+    public void GetTypeFromDefinition_CoreLibStruct_ReportsValueType()
+    {
+        using var metadata = TestUtility.OpenCoreLibMetadata();
+        var reader = metadata.Reader;
+
+        var handle = FindTypeDefinition(reader, "System", "Int32");
+        Assert.False(handle.IsNil, "Could not locate System.Int32 TypeDefinition in CoreLib.");
+
+        var sig = Provider.GetTypeFromDefinition(reader, handle, 0);
+        var typeDef = Assert.IsType<TypeDefinitionSignature>(sig);
+        Assert.True(typeDef.IsValueType);
     }
 
     // == GetTypeFromReference ================================================
@@ -64,6 +79,7 @@ public class SignatureTypeProviderTests
         var typeRef = Assert.IsType<TypeReferenceSignature>(sig);
         Assert.Equal(TypeSignatureKind.TypeReference, typeRef.Kind);
         Assert.True(typeRef.Is("System", "Object"));
+        Assert.True(typeRef.Is("System", "Object", typeRef.ResolutionScopeName));
     }
 
     // == GetSZArrayType ======================================================
