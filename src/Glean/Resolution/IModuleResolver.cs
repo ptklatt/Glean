@@ -1,9 +1,12 @@
+using System.ComponentModel;
 using System.Reflection.Metadata;
+
 namespace Glean.Resolution;
 
 /// <summary>
 /// Resolves module references (multi module assemblies) to metadata readers.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public interface IModuleResolver
 {
     /// <summary>

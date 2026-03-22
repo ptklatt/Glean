@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection.Metadata;
 
 using Glean.Signatures;
@@ -7,6 +8,11 @@ namespace Glean.Providers;
 /// <summary>
 /// Provides type decoding for custom attributes.
 /// </summary>
+/// <remarks>
+/// Most callers should use <see cref="Decoding.CustomAttributeDecoder"/> or the custom attribute
+/// helpers on contexts and extensions. This provider is mainly for raw System.Reflection.Metadata decode pipelines.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<TypeSignature>
 {
     private readonly MetadataReader _reader;

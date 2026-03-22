@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection.Metadata;
 
 using Glean.Signatures;
@@ -7,6 +8,7 @@ namespace Glean.Providers;
 /// <summary>
 /// Resolves enum underlying types for external type references.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public interface IEnumResolver
 {
     /// <summary>

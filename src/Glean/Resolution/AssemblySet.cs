@@ -10,6 +10,9 @@ namespace Glean.Resolution;
 /// Registry and resolver for cross assembly type and member lookups.
 /// </summary>
 /// <remarks>
+/// Most callers should start with <see cref="AssemblyClosure"/> and only use this type directly
+/// when they need to register readers manually or control resolver composition.
+/// <para/>
 /// Resolution uses analysis semantics over the readers registered with <see cref="Add"/> or
 /// <see cref="AddRange"/> and any optional resolvers. It does not model <c>deps.json</c>,
 /// runtime binding redirects, or load contexts.

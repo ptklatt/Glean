@@ -10,7 +10,9 @@ namespace Glean;
 /// </summary>
 /// <remarks>
 /// Use this when you only need one assembly. For cross assembly analysis, use
-/// <see cref="AssemblyClosure"/>. The reader, PE reader, and context are invalid after disposal.
+/// <see cref="AssemblyClosure"/>. The preferred fast tier entry point is
+/// <see cref="Context"/>. Use <see cref="Reader"/> when you want to stay on the raw
+/// System.Reflection.Metadata surface. The reader, PE reader, and context are invalid after disposal.
 /// </remarks>
 public sealed class AssemblyScope : IDisposable
 {
@@ -44,8 +46,12 @@ public sealed class AssemblyScope : IDisposable
     }
 
     /// <summary>
-    /// Gets the metadata reader.
+    /// Gets the raw metadata reader.
     /// </summary>
+    /// <remarks>
+    /// This is the System.Reflection.Metadata native escape hatch. For the primary fast tier entry point, prefer
+    /// <see cref="Context"/>.
+    /// </remarks>
     public MetadataReader Reader
     {
         get { ObjectDisposedException.ThrowIf(_disposed, this); return _reader; }
@@ -60,8 +66,12 @@ public sealed class AssemblyScope : IDisposable
     }
 
     /// <summary>
-    /// Gets the assembly context for zero allocation enumeration.
+    /// Gets the assembly context for zero allocation traversal.
     /// </summary>
+    /// <remarks>
+    /// This is the primary entry point for fast tier use. Drop down to <see cref="Reader"/>
+    /// whenever you need raw System.Reflection.Metadata access.
+    /// </remarks>
     public AssemblyContext Context
     {
         get { ObjectDisposedException.ThrowIf(_disposed, this); return _context; }

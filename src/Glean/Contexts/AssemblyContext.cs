@@ -10,6 +10,11 @@ namespace Glean.Contexts;
 /// <summary>
 /// Zero allocation context for AssemblyDefinition.
 /// </summary>
+/// <remarks>
+/// This is the primary fast tier assembly entry point. It keeps the underlying
+/// <see cref="MetadataReader"/> visible via <see cref="Reader"/> so callers can drop back to raw
+/// System.Reflection.Metadata whenever needed.
+/// </remarks>
 public readonly struct AssemblyContext : IEquatable<AssemblyContext>
 {
     private readonly MetadataReader _reader;
@@ -31,6 +36,10 @@ public readonly struct AssemblyContext : IEquatable<AssemblyContext>
     }
 
     public AssemblyDefinition Definition => _definition;
+
+    /// <summary>
+    /// Gets the raw metadata reader for System.Reflection.Metadata native access.
+    /// </summary>
     public MetadataReader Reader => _reader;
 
     public bool IsValid

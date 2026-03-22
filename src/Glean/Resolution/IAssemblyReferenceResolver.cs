@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Reflection.Metadata;
+
 namespace Glean.Resolution;
 
 /// <summary>
@@ -6,6 +8,7 @@ namespace Glean.Resolution;
 /// Implement this to provide custom assembly loading strategies.
 /// </summary>
 /// <seealso cref="DirectoryAssemblyResolver"/>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public interface IAssemblyReferenceResolver
 {
     /// <summary>

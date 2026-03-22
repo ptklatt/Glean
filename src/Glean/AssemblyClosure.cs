@@ -10,7 +10,10 @@ namespace Glean;
 /// </summary>
 /// <remarks>
 /// Use this for cross assembly analysis. For single assembly analysis, use
-/// <see cref="AssemblyScope"/>. Missing dependencies are recorded in
+/// <see cref="AssemblyScope"/>. The preferred fast tier entry point is
+/// <see cref="EntryContext"/>. Use <see cref="Set"/> when you need explicit cross assembly
+/// resolution, or <see cref="EntryReader"/> when you want to stay on raw
+/// System.Reflection.Metadata. Missing dependencies are recorded in
 /// <see cref="SkippedDependencies"/>. Call <see cref="ThrowIfPartial"/> when a partial
 /// closure is not acceptable. Readers and contexts are invalid after disposal.
 /// </remarks>
@@ -97,8 +100,12 @@ public sealed class AssemblyClosure : IDisposable
     }
 
     /// <summary>
-    /// Gets the metadata reader for the entry assembly.
+    /// Gets the raw metadata reader for the entry assembly.
     /// </summary>
+    /// <remarks>
+    /// This is the System.Reflection.Metadata native escape hatch for the entry assembly. For the primary fast tier
+    /// entry point, prefer <see cref="EntryContext"/>.
+    /// </remarks>
     public MetadataReader EntryReader
     {
         get { ObjectDisposedException.ThrowIf(_disposed, this); return _entryReader; }
@@ -107,14 +114,21 @@ public sealed class AssemblyClosure : IDisposable
     /// <summary>
     /// Gets the context for the entry assembly.
     /// </summary>
+    /// <remarks>
+    /// This is the primary entry point for fast tier traversal of the entry assembly.
+    /// </remarks>
     public AssemblyContext EntryContext
     {
         get { ObjectDisposedException.ThrowIf(_disposed, this); return _entryContext; }
     }
 
     /// <summary>
-    /// Gets the assembly set used for cross assembly resolution.
+    /// Gets the assembly set used for explicit cross assembly resolution.
     /// </summary>
+    /// <remarks>
+    /// This is the richer resolution tier surface. Reach for it when you need to resolve
+    /// type and member references across the loaded closure.
+    /// </remarks>
     public AssemblySet Set
     {
         get { ObjectDisposedException.ThrowIf(_disposed, this); return _set; }

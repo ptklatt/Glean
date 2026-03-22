@@ -14,6 +14,10 @@ namespace Glean.Contexts;
 /// Zero allocation context for MethodDefinition.
 /// Wraps MetadataReader + MethodDefinitionHandle + cached MethodDefinition struct.
 /// </summary>
+/// <remarks>
+/// This is the primary fast tier method API. Use the context members for common metadata
+/// queries, and drop to <see cref="Definition"/> or <see cref="Reader"/> for raw System.Reflection.Metadata access.
+/// </remarks>
 public readonly struct MethodContext : IEquatable<MethodContext>
 {
     private readonly MetadataReader _reader;

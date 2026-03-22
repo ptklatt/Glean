@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
@@ -11,6 +12,7 @@ namespace Glean.Providers;
 /// <remarks>
 /// Formats signatures into C#-like strings for debugging/tests. This API allocates.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class StringTypeProvider : ISignatureTypeProvider<string, int>, ICustomAttributeTypeProvider<string>
 {
     /// <summary>

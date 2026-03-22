@@ -10,6 +10,10 @@ namespace Glean.Decoding;
 /// <summary>
 /// Decodes custom attributes into <see cref="DecodedCustomAttribute"/> results.
 /// </summary>
+/// <remarks>
+/// This is a rich tier helper that materializes decoded object graphs for ease of use. Stay on
+/// raw System.Reflection.Metadata or the context APIs when you need tighter control over allocations.
+/// </remarks>
 public static class CustomAttributeDecoder
 {
     /// <summary>

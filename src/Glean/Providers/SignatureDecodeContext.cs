@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Collections.Immutable;
 
 using Glean.Signatures;
@@ -7,6 +8,11 @@ namespace Glean.Providers;
 /// <summary>
 /// Represents the generic context for signature decoding.
 /// </summary>
+/// <remarks>
+/// Most callers can use <see cref="Empty"/>. Populate this only when you are driving the raw System.Reflection.Metadata
+/// decode APIs and need generic substitution.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public readonly struct SignatureDecodeContext
 {
     /// <summary>

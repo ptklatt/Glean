@@ -14,6 +14,11 @@ namespace Glean.Contexts;
 /// Zero allocation context for TypeDefinition.
 /// Wraps MetadataReader + TypeDefinitionHandle + cached TypeDefinition struct.
 /// </summary>
+/// <remarks>
+/// This is the primary fast tier type API. It keeps both the raw
+/// <see cref="MetadataReader"/> and <see cref="TypeDefinition"/> visible so callers can mix
+/// convenience helpers with direct System.Reflection.Metadata access.
+/// </remarks>
 public readonly struct TypeContext : IEquatable<TypeContext>
 {
     private readonly MetadataReader _reader;

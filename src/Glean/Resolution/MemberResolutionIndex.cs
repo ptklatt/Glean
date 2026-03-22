@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 
@@ -10,9 +11,14 @@ namespace Glean.Resolution;
 /// Optional cache and index for repeated member resolution.
 /// </summary>
 /// <remarks>
+/// Most callers should use <see cref="AssemblySet.TryResolveMember(MetadataReader, MemberReferenceHandle, out MetadataReader, out EntityHandle, CancellationToken)"/>
+/// directly and only add this index when repeated member resolution becomes hot enough to justify
+/// extra cache state.
+/// <para/>
 /// Caches candidate lists and optional decoded signatures. Call <see cref="Clear"/> to
 /// release the cached state.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class MemberResolutionIndex
 {
     private static readonly MethodDefinitionHandle[] EmptyMethodCandidates      = Array.Empty<MethodDefinitionHandle>();

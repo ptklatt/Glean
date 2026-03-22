@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
 
@@ -10,9 +11,13 @@ namespace Glean.Providers;
 /// Rich decoding provider that materializes <see cref="TypeSignature"/> nodes.
 /// </summary>
 /// <remarks>
+/// Most callers should use higher level helpers such as context <c>Decode*</c> members or
+/// extension methods and only reach for this provider when staying on the raw System.Reflection.Metadata decode APIs.
+/// <para/>
 /// Primitive signatures are reused via singletons where possible, but most non primitive
 /// decode paths allocate signature objects (arrays, generic instantiations, modifiers, etc.).
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class SignatureTypeProvider : ISignatureTypeProvider<TypeSignature, SignatureDecodeContext>
 {
     /// <summary>

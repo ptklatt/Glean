@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
@@ -50,6 +51,7 @@ public readonly struct AssemblyDependencyLoadFailure
 /// directly for async loading, a shared loader lifetime, or incremental loading into an existing
 /// <see cref="AssemblySet"/>. This type is not thread safe.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class AssemblyLoader : IDisposable
 {
     private readonly List<PEReader> _ownedPEReaders = new();

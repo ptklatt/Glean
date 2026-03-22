@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Reflection.Metadata;
 
 namespace Glean.Resolution;
@@ -6,10 +7,14 @@ namespace Glean.Resolution;
 /// Resolves assemblies and modules by probing directories.
 /// </summary>
 /// <remarks>
+/// Prefer <see cref="AssemblyClosure.Load(string, string[])"/> for the common case. Use this
+/// type directly when you need custom probing logic backed by file system directories.
+/// <para/>
 /// When a target framework moniker is supplied, this resolver also probes common NuGet package
 /// layouts such as <c>lib/{tfm}/</c>, <c>ref/{tfm}/</c>, and <c>runtimes/*/lib/{tfm}/</c>.
 /// Opened scopes and resolved readers are cached for reuse. This type is not thread safe.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IModuleResolver, IDisposable
 {
     private readonly List<string> _searchPaths = new();
