@@ -51,6 +51,26 @@ public class EventContextTests
     }
 
     [Fact]
+    public void MetadataAccess_EventFixture_TypeContextEnumeratesEventsAndCountsThem()
+    {
+        using var metadata = TestUtility.BuildMetadata(EventContextSource);
+        var type = TypeContext.Create(
+            metadata.Reader,
+            metadata.FindTypeDefinitionHandle("Glean.Tests.Enumerators", "EventContextFixture"));
+
+        Assert.Equal(2, type.EventCount);
+
+        var names = new List<string>();
+        var enumerator = type.EnumerateEvents();
+        while (enumerator.MoveNext())
+        {
+            names.Add(enumerator.Current.Name);
+        }
+
+        Assert.Equal(new[] { "Changed", "Plain" }, names);
+    }
+
+    [Fact]
     public void AttributeAccess_EventFixture_ReturnsExpectedAttributeBehavior()
     {
         using var metadata = TestUtility.BuildMetadata(EventContextSource);
