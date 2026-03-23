@@ -1,4 +1,10 @@
 <Solution>
+  <Folder Name="/Samples/">
+    <Project Path="samples/FastTraversalSample/FastTraversalSample.csproj" />
+    <Project Path="samples/InspectorSample/InspectorSample.csproj" />
+    <Project Path="samples/ResolutionSample/ResolutionSample.csproj" />
+    <Project Path="samples/RichDecodingSample/RichDecodingSample.csproj" />
+  </Folder>
   <Project Path="src/Glean/Glean.csproj" />
   <Project Path="test/Glean.Tests/Glean.Tests.csproj" />
 </Solution>
