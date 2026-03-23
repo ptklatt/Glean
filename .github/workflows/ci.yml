@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore test/Glean.Tests/Glean.Tests.csproj
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          base_version="$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' Directory.Build.props)"
+          short_sha="${GITHUB_SHA::7}"
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="${base_version}-alpha.${GITHUB_RUN_NUMBER}"
+          fi
+
+          informational_version="${version}+${short_sha}"
+          artifact_name="glean-net9-${version}"
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "informational_version=${informational_version}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_name=${artifact_name}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build
+        run: >
+          dotnet build test/Glean.Tests/Glean.Tests.csproj
+          --configuration Release
+          --no-restore
+          /p:ContinuousIntegrationBuild=true
+          /p:Version=${{ steps.version.outputs.version }}
+          /p:InformationalVersion=${{ steps.version.outputs.informational_version }}
+
+      - name: Test
+        run: >
+          dotnet test test/Glean.Tests/Glean.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+
+      - name: Stage library artifact
+        shell: bash
+        run: |
+          artifact_dir="artifacts/${{ steps.version.outputs.artifact_name }}"
+          mkdir -p "${artifact_dir}"
+          cp -R src/Glean/bin/Release/net9.0/. "${artifact_dir}/"
+          cp LICENSE "${artifact_dir}/LICENSE"
+
+      - name: Upload library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: artifacts/${{ steps.version.outputs.artifact_name }}/
