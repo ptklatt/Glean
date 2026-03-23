@@ -183,6 +183,20 @@ public class AssemblyContextTests
     }
 
     [Fact]
+    public void MetadataAccess_CompiledAssembly_FindsTypeByNamespaceAndName()
+    {
+        using var metadata = CreateAssemblyContextMetadataScope();
+        var assembly = AssemblyContext.Create(metadata.Reader);
+
+        Assert.True(assembly.TryFindType("Glean.Tests.Enumerators", "AssemblyContextFixture", out var type));
+        Assert.True(type.IsValid);
+        Assert.Equal("AssemblyContextFixture", type.Name);
+
+        Assert.False(assembly.TryFindType("Glean.Tests.Enumerators", "MissingType", out var missing));
+        Assert.Equal(default, missing);
+    }
+
+    [Fact]
     public void MetadataAccess_SyntheticAssembly_EnumeratesExportedTypes()
     {
         using var provider = CreateExportedTypeMetadataReaderProvider();

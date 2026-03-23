@@ -73,6 +73,8 @@ public class EnumeratorBehaviorTests
         using var metadata = TestUtility.BuildMetadata(InterfaceEnumerationSource);
         var type = GetTypeContext(metadata, "Glean.Tests.Enumerators", "InterfaceEnumerationFixture");
 
+        Assert.Equal(2, type.InterfaceCount);
+
         var enumerator = type.EnumerateInterfaces();
 
         Assert.True(enumerator.MoveNext());
@@ -122,6 +124,10 @@ public class EnumeratorBehaviorTests
         using var metadata = TestUtility.BuildMetadata(NestedAndParameterSource);
         var type = GetTypeContext(metadata, "Glean.Tests.Enumerators", "OuterEnumerationFixture");
         var method = GetMethodContext(type, "Sample");
+
+        Assert.Equal(2, type.MethodCount);
+        Assert.Equal(0, type.PropertyCount);
+        Assert.Equal(0, type.EventCount);
 
         var enumerator = method.EnumerateParameters();
         var names = new List<string>();

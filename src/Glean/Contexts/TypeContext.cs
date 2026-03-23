@@ -187,9 +187,129 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public EntityHandle BaseType => _definition.BaseType;
 
     /// <summary>
+    /// Gets whether this type declares a base type.
+    /// </summary>
+    public bool HasBaseType
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => !_definition.BaseType.IsNil;
+    }
+
+    /// <summary>
     /// Gets the namespace definition handle.
     /// </summary>
     public NamespaceDefinitionHandle NamespaceDefinition => _definition.NamespaceDefinition;
+
+    /// <summary>
+    /// Gets the number of methods declared by this type.
+    /// </summary>
+    public int MethodCount => _definition.GetMethods().Count;
+
+    /// <summary>
+    /// Gets the number of properties declared by this type.
+    /// </summary>
+    public int PropertyCount => _definition.GetProperties().Count;
+
+    /// <summary>
+    /// Gets the number of events declared by this type.
+    /// </summary>
+    public int EventCount => _definition.GetEvents().Count;
+
+    /// <summary>
+    /// Gets the number of implemented interfaces declared by this type.
+    /// </summary>
+    public int InterfaceCount => _definition.GetInterfaceImplementations().Count;
+
+    /// <summary>
+    /// Tries to get the base type as a local type definition.
+    /// </summary>
+    public bool TryGetBaseTypeDefinition(out TypeContext type)
+    {
+        var baseType = _definition.BaseType;
+        if (baseType.IsNil)
+        {
+            type = default;
+            return false;
+        }
+
+        if (baseType.Kind == HandleKind.TypeDefinition)
+        {
+            type = TypeContext.Create(_reader, (TypeDefinitionHandle)baseType);
+            return true;
+        }
+
+        type = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to get the base type as a type reference.
+    /// </summary>
+    public bool TryGetBaseTypeReference(out TypeReferenceContext type)
+    {
+        var baseType = _definition.BaseType;
+        if (baseType.IsNil)
+        {
+            type = default;
+            return false;
+        }
+
+        if (baseType.Kind == HandleKind.TypeReference)
+        {
+            type = TypeReferenceContext.Create(_reader, (TypeReferenceHandle)baseType);
+            return true;
+        }
+
+        type = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to get the base type as a type specification handle.
+    /// </summary>
+    public bool TryGetBaseTypeSpecification(out TypeSpecificationHandle handle)
+    {
+        var baseType = _definition.BaseType;
+        if (baseType.IsNil)
+        {
+            handle = default;
+            return false;
+        }
+
+        if (baseType.Kind == HandleKind.TypeSpecification)
+        {
+            handle = (TypeSpecificationHandle)baseType;
+            return true;
+        }
+
+        handle = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the base type name for definition and reference base types.
+    /// </summary>
+    /// <remarks>
+    /// Allocates managed strings. Returns <see langword="null"/> when there is no base type or when
+    /// the base type is a <see cref="HandleKind.TypeSpecification"/>. Use <see cref="DecodeBaseType"/>
+    /// for generic or otherwise encoded base types.
+    /// </remarks>
+    public string? GetBaseTypeName()
+    {
+        return _definition.GetBaseTypeName(_reader);
+    }
+
+    /// <summary>
+    /// Decodes the base type into a richer signature model.
+    /// </summary>
+    /// <remarks>
+    /// Rich tier: decodes the base type into a <see cref="TypeSignature"/> object graph and allocates.
+    /// For fast tier handle access, use <see cref="BaseType"/> or the typed <c>TryGetBaseType*</c> helpers.
+    /// </remarks>
+    public TypeSignature? DecodeBaseType()
+    {
+        return _definition.GetBaseTypeSignature(_reader);
+    }
 
     /// <summary>
     /// Checks if the type is a top level public type (not nested). Returns <c>false</c> for nested public types.
@@ -365,6 +485,15 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public PropertyEnumerator EnumerateProperties()
     {
         return PropertyEnumerator.Create(_reader, _definition.GetProperties());
+    }
+
+    /// <summary>
+    /// Enumerates this type's events.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EventEnumerator EnumerateEvents()
+    {
+        return EventEnumerator.Create(_reader, _definition.GetEvents());
     }
 
     /// <summary>

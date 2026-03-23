@@ -155,6 +155,30 @@ public readonly struct AssemblyContext : IEquatable<AssemblyContext>
         return AssemblyReferenceEnumerator.Create(_reader, _reader.AssemblyReferences);
     }
 
+    /// <summary>
+    /// Finds a type definition by namespace and name.
+    /// </summary>
+    /// <remarks>
+    /// Zero allocation: uses <see cref="TypeContext.Is(string, string)"/> while scanning the
+    /// local TypeDef table.
+    /// </remarks>
+    public bool TryFindType(string ns, string name, out TypeContext type)
+    {
+        foreach (var candidate in EnumerateTypes())
+        {
+            if (!candidate.Is(ns, name))
+            {
+                continue;
+            }
+
+            type = candidate;
+            return true;
+        }
+
+        type = default;
+        return false;
+    }
+
     /// <summary>Returns true if a custom attribute of the specified type is present.</summary>
     /// <remarks>Zero allocation.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
