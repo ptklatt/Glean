@@ -12,6 +12,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <InternalsVisibleTo Include="Glean.Tests" />
       <Folder Include="Contexts\" />
       <Folder Include="Decoding\" />
       <Folder Include="Enumerators\" />
