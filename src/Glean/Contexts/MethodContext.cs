@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Reflection;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Runtime.CompilerServices;
 
 using Glean.Enumerators;
@@ -57,7 +59,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _reader is not null && !_handle.IsNil;
+        get => (_reader != null) && !_handle.IsNil;
     }
 
     /// <summary>
@@ -290,6 +292,23 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool HasAttribute(string ns, string name)
     {
         return _definition.GetCustomAttributes().TryFindAttribute(_reader, ns, name, out _);
+    }
+
+    /// <summary>
+    /// Enumerates the portable PDB sequence points for this method.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Advanced)]
+    public SequencePointEnumerator EnumerateSequencePoints(MetadataReader pdbReader)
+    {
+        if (pdbReader == null)
+        {
+            throw new ArgumentNullException(nameof(pdbReader));
+        }
+
+        int rowNumber = MetadataTokens.GetRowNumber(_handle);
+        var debugHandle = MetadataTokens.MethodDebugInformationHandle(rowNumber);
+        var debugInformation = pdbReader.GetMethodDebugInformation(debugHandle);
+        return SequencePointEnumerator.Create(debugInformation.GetSequencePoints());
     }
 
     /// <summary>
