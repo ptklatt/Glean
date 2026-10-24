@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 
+using Glean.Extensions;
+
 namespace Glean.Contexts;
 
 /// <summary>
@@ -81,6 +83,14 @@ public readonly struct ExportedTypeContext : IEquatable<ExportedTypeContext>
     /// Gets whether this is a type forwarder.
     /// </summary>
     public bool IsForwarder => _exportedType.IsForwarder;
+
+    /// <summary>
+    /// Tries to get the final forwarded resolution scope by following exported type links.
+    /// </summary>
+    public bool TryGetForwardedResolutionScope(out EntityHandle finalScope)
+    {
+        return _exportedType.TryGetForwardedResolutionScope(_reader, out finalScope);
+    }
 
     /// <summary>
     /// Checks whether the type name matches the specified name handle.
