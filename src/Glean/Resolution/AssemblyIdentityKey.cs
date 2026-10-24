@@ -54,6 +54,11 @@ internal readonly struct AssemblyIdentityKey : IEquatable<AssemblyIdentityKey>
         return new AssemblyIdentityKey(name, version, culture, hasToken, token);
     }
 
+    public bool MatchesDefinition(MetadataReader reader)
+    {
+        return reader.IsAssembly && Equals(FromDefinition(reader.GetAssemblyDefinition(), reader));
+    }
+
     public bool Equals(AssemblyIdentityKey other)
     {
         return string.Equals(Name, other.Name, StringComparison.OrdinalIgnoreCase) &&

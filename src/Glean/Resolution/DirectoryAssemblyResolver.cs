@@ -223,20 +223,13 @@ public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IMod
             return false;
         }
 
-        if (!candidateReader.IsAssembly)
+        if (!requestedIdentity.MatchesDefinition(candidateReader))
         {
             resolvedReader = null;
             return false;
         }
 
-        var candidateIdentity = AssemblyIdentityKey.FromDefinition(candidateReader.GetAssemblyDefinition(), candidateReader);
-        _assemblyCache[candidateIdentity] = candidateReader;
-        if (!candidateIdentity.Equals(requestedIdentity))
-        {
-            resolvedReader = null;
-            return false;
-        }
-
+        _assemblyCache[requestedIdentity] = candidateReader;
         resolvedReader = candidateReader;
         return true;
     }

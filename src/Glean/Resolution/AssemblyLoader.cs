@@ -16,7 +16,9 @@ public enum AssemblyDependencyLoadFailureKind
     /// <summary>The file exists but is not a valid PE image or has no metadata.</summary>
     BadImageFormat,
     /// <summary>The file was loaded successfully but does not contain an assembly manifest (e.g. a .netmodule).</summary>
-    NotAssembly
+    NotAssembly,
+    /// <summary>The candidate assembly does not match the requested name, version, culture, or public key token.</summary>
+    IdentityMismatch
 }
 
 /// <summary>
@@ -50,6 +52,8 @@ public readonly struct AssemblyDependencyLoadFailure
 /// Prefer <see cref="AssemblyScope"/> or <see cref="AssemblyClosure"/> for typical use. Use this
 /// directly for async loading, a shared loader lifetime, or incremental loading into an existing
 /// <see cref="AssemblySet"/>. This type is not thread safe.
+/// Dependency closure loading requires the reference name, version, normalized culture,
+/// and public key token to match. Mismatched candidates are skipped while probing continues.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class AssemblyLoader : IDisposable
@@ -224,10 +228,11 @@ public sealed class AssemblyLoader : IDisposable
             foreach (var asmRefHandle in current.AssemblyReferences)
             {
                 var asmRef = current.GetAssemblyReference(asmRefHandle);
-                var asmName = current.GetString(asmRef.Name);
+                var requestedIdentity = AssemblyIdentityKey.FromReference(asmRef, current);
+                var asmName = requestedIdentity.Name;
 
                 var loadResult = TryLoadDependency(
-                    asmName,
+                    requestedIdentity,
                     effectiveSearchPaths,
                     cancellationToken);
                 if (!loadResult.IsSuccess)
@@ -296,10 +301,11 @@ public sealed class AssemblyLoader : IDisposable
             foreach (var asmRefHandle in current.AssemblyReferences)
             {
                 var asmRef = current.GetAssemblyReference(asmRefHandle);
-                var asmName = current.GetString(asmRef.Name);
+                var requestedIdentity = AssemblyIdentityKey.FromReference(asmRef, current);
+                var asmName = requestedIdentity.Name;
 
                 var loadResult = await TryLoadDependencyAsync(
-                    asmName,
+                    requestedIdentity,
                     effectiveSearchPaths,
                     cancellationToken).ConfigureAwait(false);
                 if (!loadResult.IsSuccess)
@@ -363,17 +369,18 @@ public sealed class AssemblyLoader : IDisposable
     }
 
     private async Task<DependencyLoadResult> TryLoadDependencyAsync(
-        string assemblyName,
+        AssemblyIdentityKey requestedIdentity,
         IReadOnlyList<string> searchPaths,
         CancellationToken cancellationToken)
     {
         DependencyLoadResult lastFailure = default;
 
-        foreach (var candidatePath in EnumerateCandidatePaths(assemblyName, searchPaths))
+        foreach (var candidatePath in EnumerateCandidatePaths(requestedIdentity.Name, searchPaths))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var loadResult = await TryLoadCandidateAsync(candidatePath, cancellationToken).ConfigureAwait(false);
+            var candidate = await TryLoadCandidateAsync(candidatePath, cancellationToken).ConfigureAwait(false);
+            var loadResult = ValidateDependencyCandidate(candidate, requestedIdentity);
             if (loadResult.IsSuccess)
             {
                 return loadResult;
@@ -391,17 +398,18 @@ public sealed class AssemblyLoader : IDisposable
     }
 
     private DependencyLoadResult TryLoadDependency(
-        string assemblyName,
+        AssemblyIdentityKey requestedIdentity,
         IReadOnlyList<string> searchPaths,
         CancellationToken cancellationToken)
     {
         DependencyLoadResult lastFailure = default;
 
-        foreach (var candidatePath in EnumerateCandidatePaths(assemblyName, searchPaths))
+        foreach (var candidatePath in EnumerateCandidatePaths(requestedIdentity.Name, searchPaths))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var loadResult = TryLoadCandidate(candidatePath, cancellationToken);
+            var candidate = TryLoadCandidate(candidatePath, cancellationToken);
+            var loadResult = ValidateDependencyCandidate(candidate, requestedIdentity);
             if (loadResult.IsSuccess)
             {
                 return loadResult;
@@ -416,6 +424,28 @@ public sealed class AssemblyLoader : IDisposable
         return lastFailure.HasFailure
             ? lastFailure
             : DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.NotFound, null);
+    }
+
+    private static DependencyLoadResult ValidateDependencyCandidate(
+        DependencyLoadResult candidate,
+        AssemblyIdentityKey requestedIdentity)
+    {
+        if (!candidate.IsSuccess)
+        {
+            return candidate;
+        }
+
+        if (!candidate.Reader!.IsAssembly)
+        {
+            return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.NotAssembly, candidate.Path);
+        }
+
+        if (!requestedIdentity.MatchesDefinition(candidate.Reader))
+        {
+            return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.IdentityMismatch, candidate.Path);
+        }
+
+        return candidate;
     }
 
     private async Task<DependencyLoadResult> TryLoadCandidateAsync(string candidatePath, CancellationToken cancellationToken)
