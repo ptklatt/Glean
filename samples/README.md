@@ -2,6 +2,8 @@
 
 This folder contains three small starter samples plus one larger inspector demo.
 
+For task focused snippets, see the [usage recipes](../docs/recipes.md).
+
 ## Run
 
 Fast traversal:

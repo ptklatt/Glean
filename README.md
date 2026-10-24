@@ -2,7 +2,7 @@
 
 # Glean
 
-Glean is intended to be a usability layer over `System.Reflection.Metadata` without sacraficing performance.
+Glean is a usability layer over `System.Reflection.Metadata` that keeps traversal costs explicit.
 
 The goal is not to hide `System.Reflection.Metadata`. The goal is to remove the repetitive parts that
 most users end up writing anyway while keeping the raw reader, handles, and
@@ -14,12 +14,12 @@ Glean is easiest to use if you pick the lane that matches the cost model you
 want:
 
 - Fast traversal: `AssemblyScope`, `AssemblyContext`, `TypeContext`,
-  `MethodContext`, struct enumerators, and identity
+  `ModuleContext`, `MethodContext`, `MetadataTraversal`, struct enumerators, and identity
   helpers like `NameIs`, `NamespaceIs`, and `TryFind*`.
 - Rich decoding: `Decode*` helpers, `TypeSignature`,
-  `CustomAttributeDecoder`, and formatting
+  `ITypeSignatureVisitor<TState>`, `CustomAttributeDecoder`, and formatting
   helpers that materialize richer object graphs.
-- Cross assembly resolution: `AssemblyClosure` for resolving
+- Cross assembly resolution: `AssemblyClosure` and `AssemblySet` for resolving
   type and member references across a dependency closure.
 
 Raw `System.Reflection.Metadata` is always still here:
@@ -32,10 +32,16 @@ Raw `System.Reflection.Metadata` is always still here:
 
 ## Primary Entry Points
 
+The examples run in a console project that references Glean. Pass an assembly
+path as the first argument, followed by any dependency directories needed for
+closure loading.
+
 Use `AssemblyScope` when you only need one assembly:
 
 ```csharp
-using var scope = AssemblyScope.Open(path);
+using Glean;
+
+using var scope = AssemblyScope.Open(args[0]);
 var assembly = scope.Context;
 
 foreach (var type in assembly.EnumerateTypes())
@@ -53,7 +59,10 @@ Use `AssemblyClosure` when you need transitive dependencies and explicit
 resolution:
 
 ```csharp
-using var closure = AssemblyClosure.Load(path, searchPaths);
+using Glean;
+using Glean.Extensions;
+
+using var closure = AssemblyClosure.Load(args[0], args.Skip(1).ToArray());
 
 foreach (var typeReference in closure.EntryReader.EnumerateTypeReferences())
 {
@@ -73,18 +82,23 @@ foreach (var typeReference in closure.EntryReader.EnumerateTypeReferences())
 
 ## Cost Model
 
-The naming is intentional:
+Context enumerators, identity checks such as `NameIs` and `NamespaceIs`, and
+`MetadataTraversal` use raw metadata without building signature graphs. Struct
+visitors implement every callback explicitly; unused callbacks can have empty bodies.
 
-- `Enumerate*`, `TryFind*`, `NameIs`, `NamespaceIs`, `HasAttribute`,
-  `Get*Handle`, `MetadataTraversal.*`: fast tier and intended for low
-  allocation traversal.
-- `Decode*`, `TypeSignature.Accept(ref visitor, state)`, `ToFullNameString`,
-  `TypeSignature.ToString()`: richer helpers for already decoded metadata.
-- `Resolve*`: cross assembly APIs that may build and reuse lookup caches.
+`Decode*` and formatting helpers materialize richer values and can allocate.
+`TypeSignature.Accept(ref visitor, state)` dispatches over an already decoded
+signature; passing a struct visitor by reference avoids boxing.
+
+Overloads that take an `AssemblySet` perform explicit resolution and may populate
+caches. `EnumerateAllInterfaces(assemblySet)` also builds a queue and visited set.
 
 If you are on a hot path, stay on contexts, enumerators, handles, and the raw
 reader. If you need a friendlier shape for signatures, attributes, or
 resolution, move up a tier only where it pays for itself.
+
+See [performance notes](docs/performance.md) for allocation boundaries and the
+scope of the regression tests.
 
 ## Samples
 
@@ -98,3 +112,8 @@ Runnable samples live under [`samples`](samples/README.md):
 The first three are starter samples. `InspectorSample` is a larger demo tool
 that shows how the tiers mix in one flow. All of them are path driven and work
 against real assemblies rather than test fixtures.
+
+## Recipes
+
+[Usage recipes](docs/recipes.md) cover module metadata, visitors, portable PDBs,
+signature decoding, and cross assembly resolution.
