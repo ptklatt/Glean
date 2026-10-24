@@ -34,6 +34,12 @@ public sealed class PointerSignature : TypeSignature
     public override bool Equals(TypeSignature? other)
         => (other is PointerSignature p) && (ElementType.Equals(p.ElementType));
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitPointer(this, state);
+    }
+
     public override int GetHashCode() => HashCode.Combine(Kind, ElementType);
 
     public override void FormatTo(StringBuilder sb)

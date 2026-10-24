@@ -28,6 +28,12 @@ public sealed class SentinelTypeSignature : TypeSignature
 
     public override bool Equals(TypeSignature? other) => other is SentinelTypeSignature;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitSentinel(this, state);
+    }
+
     public override int GetHashCode() => (int)Kind;
 
     public override void FormatTo(StringBuilder sb)

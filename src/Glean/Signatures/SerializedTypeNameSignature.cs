@@ -37,6 +37,12 @@ public sealed class SerializedTypeNameSignature : TypeSignature
         => (other is SerializedTypeNameSignature s) &&
            string.Equals(SerializedName, s.SerializedName, StringComparison.Ordinal);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitSerializedTypeName(this, state);
+    }
+
     public override int GetHashCode() => HashCode.Combine(Kind, SerializedName);
 
     public override void FormatTo(StringBuilder sb)

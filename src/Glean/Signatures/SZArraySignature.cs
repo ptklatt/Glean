@@ -34,6 +34,12 @@ public sealed class SZArraySignature : TypeSignature
     public override bool Equals(TypeSignature? other)
         => (other is SZArraySignature s) && ElementType.Equals(s.ElementType);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitSZArray(this, state);
+    }
+
     public override int GetHashCode() => HashCode.Combine(Kind, ElementType);
 
     public override void FormatTo(StringBuilder sb)

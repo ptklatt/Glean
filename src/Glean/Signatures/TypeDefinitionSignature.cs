@@ -104,6 +104,12 @@ public sealed class TypeDefinitionSignature : TypeSignature
     public override bool Equals(TypeSignature? other)
         => (other is TypeDefinitionSignature t) && (t._handle == _handle) && ReferenceEquals(t._reader, _reader);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitTypeDefinition(this, state);
+    }
+
     public override int GetHashCode() => HashCode.Combine(_reader, _handle);
 
     public override void FormatTo(StringBuilder sb)

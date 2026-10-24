@@ -34,6 +34,12 @@ public sealed class ByRefSignature : TypeSignature
     public override bool Equals(TypeSignature? other)
         => (other is ByRefSignature b) && (ElementType.Equals(b.ElementType));
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitByRef(this, state);
+    }
+
     public override int GetHashCode() => HashCode.Combine(Kind, ElementType);
 
     public override void FormatTo(StringBuilder sb)

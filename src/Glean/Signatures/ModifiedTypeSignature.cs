@@ -66,6 +66,12 @@ public sealed class ModifiedTypeSignature : TypeSignature
         return true;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitModifiedType(this, state);
+    }
+
     public override int GetHashCode()
     {
         var hc = new HashCode();

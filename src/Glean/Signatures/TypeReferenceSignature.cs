@@ -141,6 +141,12 @@ public sealed class TypeReferenceSignature : TypeSignature
                (ResolutionScopeName == r.ResolutionScopeName);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitTypeReference(this, state);
+    }
+
     public override int GetHashCode()
     {
         var typeRef = _reader.GetTypeReference(_handle);

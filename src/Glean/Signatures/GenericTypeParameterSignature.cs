@@ -40,6 +40,12 @@ public sealed class GenericTypeParameterSignature : TypeSignature
     public override bool Equals(TypeSignature? other)
         => other is GenericTypeParameterSignature g && g.Index == Index;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitGenericTypeParameter(this, state);
+    }
+
     public override int GetHashCode() => HashCode.Combine(Kind, Index);
 
     public override void FormatTo(StringBuilder sb)

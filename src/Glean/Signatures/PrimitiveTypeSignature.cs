@@ -77,6 +77,12 @@ public sealed class PrimitiveTypeSignature : TypeSignature
     public override bool Equals(TypeSignature? other)
         => (other is PrimitiveTypeSignature p) && (p.TypeCode == TypeCode);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitPrimitive(this, state);
+    }
+
     public override int GetHashCode() => HashCode.Combine(Kind, TypeCode);
 
     public override void FormatTo(StringBuilder sb)

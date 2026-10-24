@@ -44,6 +44,12 @@ public sealed class FunctionPointerSignature : TypeSignature
         return true;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+    {
+        visitor.VisitFunctionPointer(this, state);
+    }
+
     public override int GetHashCode()
     {
         var hc = new HashCode();

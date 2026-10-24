@@ -35,6 +35,16 @@ public abstract class TypeSignature : IEquatable<TypeSignature>
     public bool Is<T>() where T : TypeSignature => this is T;
 
     /// <summary>
+    /// Dispatches this signature to a visitor.
+    /// </summary>
+    /// <typeparam name="TVisitor">The visitor type.</typeparam>
+    /// <typeparam name="TState">The caller supplied state type.</typeparam>
+    /// <param name="visitor">The visitor to dispatch to.</param>
+    /// <param name="state">The caller supplied state value.</param>
+    public abstract void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
+        where TVisitor : ITypeSignatureVisitor<TState>;
+
+    /// <summary>
     /// Formats this type signature into a string builder.
     /// </summary>
     /// <param name="sb">The string builder to append to.</param>
