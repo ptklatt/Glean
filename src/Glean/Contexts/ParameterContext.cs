@@ -124,6 +124,15 @@ public readonly struct ParameterContext : IEquatable<ParameterContext>
     }
 
     /// <summary>
+    /// Enumerates this parameter's custom attributes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public CustomAttributeEnumerator EnumerateCustomAttributes()
+    {
+        return CustomAttributeEnumerator.Create(_reader, _parameter.GetCustomAttributes());
+    }
+
+    /// <summary>
     /// Enumerates only attributes whose type matches the specified namespace and name.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
