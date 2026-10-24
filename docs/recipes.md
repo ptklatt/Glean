@@ -375,7 +375,7 @@ Notes:
 - If all you need is presence or a handle, stay on `HasAttribute` or
   `TryFindAttribute`.
 
-## Decode a Full Method Signature
+## Decode a Full Method Signature And Find Parameter Metadata
 
 For common cases, `MethodContext.DecodeReturnType()` is enough. When you need
 parameters and generic arity too, use the lower level signature decode APIs.
@@ -406,9 +406,17 @@ foreach (var type in scope.Context.EnumerateTypes())
 
         Console.WriteLine($"{method.Name} returns {signature.ReturnType}");
 
-        foreach (var parameterType in signature.ParameterTypes)
+        for (int index = 0; index < signature.ParameterTypes.Length; index++)
         {
-            Console.WriteLine($"  param: {parameterType}");
+            string name = method.TryGetParameter(index, out var parameter)
+                ? parameter.Name
+                : "(metadata absent)";
+            Console.WriteLine($"  param {index}: {signature.ParameterTypes[index]} {name}");
+        }
+
+        if (method.TryGetReturnParameter(out var returnParameter))
+        {
+            Console.WriteLine($"  return metadata: {returnParameter.Attributes}");
         }
     }
 }
@@ -417,6 +425,10 @@ foreach (var type in scope.Context.EnumerateTypes())
 `ParameterTypes` describes signature positions. `EnumerateParameters()` reads
 optional Param metadata rows, including return metadata when present; those rows
 can be sparse and should not be matched to signature positions by list index.
+`TryGetParameter(i)` looks for sequence `i + 1`, and `TryGetReturnParameter()`
+looks for sequence zero. Both return false when metadata is absent and avoid
+allocating or decoding signatures. Negative indices throw; out-of-range indices
+return false.
 
 ## Walk a Decoded Signature With a Visitor
 
@@ -686,6 +698,11 @@ foreach (var typeReference in closure.EntryReader.EnumerateTypeReferences())
     }
 }
 ```
+
+For an already decoded `TypeReferenceSignature`, the same `TryResolve`
+overloads are available. Composite signatures do not represent one type
+definition: walk their children with a signature visitor or map them directly
+while decoding with an `ISignatureTypeProvider<TType, TContext>`.
 
 ## Follow Exported Type Forwarders To Their Final Scope
 

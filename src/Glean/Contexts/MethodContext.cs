@@ -221,6 +221,63 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     }
 
     /// <summary>
+    /// Tries to get optional Param metadata for a zero based signature parameter index.
+    /// </summary>
+    /// <remarks>
+    /// Signature position i maps to Param sequence i + 1. Missing or out of range metadata
+    /// returns false. This lookup does not allocate or decode parameter type signatures.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The index is negative.</exception>
+    public bool TryGetParameter(int index, out ParameterContext parameter)
+    {
+        if (index < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        var signature = _reader.GetBlobReader(_definition.Signature);
+        var header = signature.ReadSignatureHeader();
+        if (header.IsGeneric)
+        {
+            signature.ReadCompressedInteger();
+        }
+
+        int parameterCount = signature.ReadCompressedInteger();
+        if (index >= parameterCount)
+        {
+            parameter = default;
+            return false;
+        }
+
+        return TryGetParameterBySequence(index + 1, out parameter);
+    }
+
+    /// <summary>
+    /// Tries to get optional return parameter metadata from Param sequence zero.
+    /// </summary>
+    /// <remarks>This lookup does not allocate or decode the return type signature.</remarks>
+    public bool TryGetReturnParameter(out ParameterContext parameter)
+    {
+        return TryGetParameterBySequence(0, out parameter);
+    }
+
+    private bool TryGetParameterBySequence(int sequence, out ParameterContext parameter)
+    {
+        foreach (var handle in _definition.GetParameters())
+        {
+            var candidate = ParameterContext.UnsafeCreate(_reader, handle, _handle);
+            if (candidate.SequenceNumber == sequence)
+            {
+                parameter = candidate;
+                return true;
+            }
+        }
+
+        parameter = default;
+        return false;
+    }
+
+    /// <summary>
     /// Enumerates this method's generic parameters.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

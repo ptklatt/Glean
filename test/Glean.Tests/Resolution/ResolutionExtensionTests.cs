@@ -163,6 +163,88 @@ public sealed class ResolutionExtensionTests
     }
 
     [Fact]
+    public void TypeReferenceSignatureTryResolve_ResolvesDefinitionWithAndWithoutReason()
+    {
+        using var fixture = ResolutionExtensionFixture.Create();
+        var reference = new TypeReferenceSignature(
+            fixture.Consumer.Reader,
+            ResolutionTestHelpers.FindTypeReferenceHandle(fixture.Consumer.Reader, "Contracts", "Service"));
+
+        Assert.True(reference.TryResolve(fixture.Set, out var resolved));
+        Assert.True(reference.TryResolve(fixture.Set, out var withReason, out var reason));
+
+        Assert.Same(fixture.Dependency.Reader, resolved.Reader);
+        Assert.Equal("Service", resolved.Name);
+        Assert.Equal(resolved, withReason);
+        Assert.Equal(ResolutionFailureReason.None, reason);
+    }
+
+    [Fact]
+    public void TypeReferenceSignatureTryResolve_MissingAssembly_PreservesFailureReason()
+    {
+        using var fixture = MissingResolutionFixture.Create();
+        var reference = new TypeReferenceSignature(
+            fixture.Consumer.Reader,
+            ResolutionTestHelpers.FindTypeReferenceHandle(fixture.Consumer.Reader, "Contracts", "Base"));
+
+        Assert.False(reference.TryResolve(fixture.Set, out var resolved));
+        Assert.False(reference.TryResolve(fixture.Set, out var withReason, out var reason));
+
+        Assert.Equal(default, resolved);
+        Assert.Equal(default, withReason);
+        Assert.Equal(ResolutionFailureReason.AssemblyNotFound, reason);
+        Assert.Null(reference.ResolveIsValueType(fixture.Set));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TypeReferenceSignatureTryResolve_NullSignature_ThrowsArgumentNull(bool includeReason)
+    {
+        using var set = new AssemblySet();
+        TypeReferenceSignature reference = null!;
+
+        var exception = Assert.Throws<ArgumentNullException>(() =>
+        {
+            if (includeReason)
+            {
+                reference.TryResolve(set, out _, out _);
+            }
+            else
+            {
+                reference.TryResolve(set, out _);
+            }
+        });
+
+        Assert.Equal("typeReference", exception.ParamName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TypeReferenceSignatureTryResolve_NullAssemblySet_ThrowsArgumentNull(bool includeReason)
+    {
+        using var fixture = ResolutionExtensionFixture.Create();
+        var reference = new TypeReferenceSignature(
+            fixture.Consumer.Reader,
+            ResolutionTestHelpers.FindTypeReferenceHandle(fixture.Consumer.Reader, "Contracts", "Service"));
+
+        var exception = Assert.Throws<ArgumentNullException>(() =>
+        {
+            if (includeReason)
+            {
+                reference.TryResolve(null!, out _, out _);
+            }
+            else
+            {
+                reference.TryResolve(null!, out _);
+            }
+        });
+
+        Assert.Equal("assemblySet", exception.ParamName);
+    }
+
+    [Fact]
     public void ResolutionDiagnostics_ReturnsMessagesForAllReasons()
     {
         foreach (var reason in Enum.GetValues<ResolutionFailureReason>())
