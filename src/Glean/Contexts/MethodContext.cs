@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 
 using Glean.Enumerators;
@@ -366,6 +367,28 @@ public readonly struct MethodContext : IEquatable<MethodContext>
         var debugHandle = MetadataTokens.MethodDebugInformationHandle(rowNumber);
         var debugInformation = pdbReader.GetMethodDebugInformation(debugHandle);
         return SequencePointEnumerator.Create(debugInformation.GetSequencePoints());
+    }
+
+    /// <summary>
+    /// Enumerates experimental IL instructions for internal use.
+    /// </summary>
+    /// <remarks>
+    /// This path copies the IL bytes. The operand model remains incomplete.
+    /// </remarks>
+    internal ILInstructionEnumerator EnumerateILInstructions(PEReader peReader)
+    {
+        var bytes = _definition.DecodeILBytes(peReader);
+        return ILInstructionEnumerator.Create(bytes);
+    }
+
+    /// <summary>
+    /// Enumerates experimental IL instructions over a read only span for internal use.
+    /// </summary>
+    /// <remarks>The operand model remains incomplete.</remarks>
+    internal ILInstructionSpanEnumerator EnumerateILInstructionsFromSpan(PEReader peReader)
+    {
+        var span = _definition.GetILSpan(peReader);
+        return ILInstructionSpanEnumerator.Create(span);
     }
 
     /// <summary>
