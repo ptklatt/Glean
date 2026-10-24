@@ -76,8 +76,17 @@ public abstract class TypeSignature : IEquatable<TypeSignature>
     /// </summary>
     public static bool operator ==(TypeSignature? left, TypeSignature? right)
     {
-        if (ReferenceEquals(left, right)) { return true; }
-        if ((left == null) || (right == null)) { return false; }
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        // Compare as object so null checks do not call this operator again.
+        if (((object?)left == null) || ((object?)right == null))
+        {
+            return false;
+        }
+
         return left.Equals(right);
     }
 
