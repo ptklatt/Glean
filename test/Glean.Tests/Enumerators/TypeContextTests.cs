@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection.Metadata;
 
 using Xunit;
@@ -87,6 +88,36 @@ public sealed class TypeContextTests
         Assert.True(specificationHandle.IsNil);
         Assert.Null(type.GetBaseTypeName());
         Assert.Null(type.DecodeBaseType());
+    }
+
+    [Fact]
+    public void EnumerateBaseTypes_SameAssemblyOnly_FollowsLocalBaseAndStopsAtExternalBase()
+    {
+        using var metadata = TestUtility.OpenMetadata(typeof(TypeContextTests).Assembly);
+        var type = GetTypeContext(metadata, "Glean.Tests.Extensions", "DerivedFromLocalBaseFixture");
+
+        var names = new List<string>();
+        foreach (var baseType in type.EnumerateBaseTypes())
+        {
+            names.Add(baseType.Name);
+        }
+
+        Assert.Equal(new[] { "LocalBaseFixture" }, names);
+    }
+
+    [Fact]
+    public void EnumerateBaseTypes_SameAssemblyOnly_StopsAtTypeSpecificationBase()
+    {
+        using var metadata = TestUtility.OpenMetadata(typeof(TypeContextTests).Assembly);
+        var type = GetTypeContext(metadata, "Glean.Tests.Extensions", "DerivedFromGenericBaseFixture");
+
+        var names = new List<string>();
+        foreach (var baseType in type.EnumerateBaseTypes())
+        {
+            names.Add(baseType.Name);
+        }
+
+        Assert.Empty(names);
     }
 
     private static TypeContext GetTypeContext(MetadataScope metadata, string ns, string name)

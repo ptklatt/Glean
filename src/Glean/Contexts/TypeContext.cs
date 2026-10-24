@@ -312,6 +312,20 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     }
 
     /// <summary>
+    /// Enumerates base types that are defined in the same module.
+    /// </summary>
+    /// <remarks>
+    /// Fast tier: follows only local <see cref="HandleKind.TypeDefinition"/> base types.
+    /// It stops when the next base type is external or encoded as a type specification.
+    /// For cross assembly walking, use <see cref="TypeContextResolutionExtensions.EnumerateBaseTypes(TypeContext, Resolution.AssemblySet)"/>.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public SameAssemblyBaseTypeEnumerator EnumerateBaseTypes()
+    {
+        return SameAssemblyBaseTypeEnumerator.Create(this);
+    }
+
+    /// <summary>
     /// Checks if the type is a top level public type (not nested). Returns <c>false</c> for nested public types.
     /// </summary>
     /// <remarks>
