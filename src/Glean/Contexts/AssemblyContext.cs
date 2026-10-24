@@ -42,6 +42,15 @@ public readonly struct AssemblyContext : IEquatable<AssemblyContext>
     /// </summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>
+    /// Gets the module metadata for this assembly's manifest module.
+    /// </summary>
+    public ModuleContext Module
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => ModuleContext.Create(_reader);
+    }
+
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

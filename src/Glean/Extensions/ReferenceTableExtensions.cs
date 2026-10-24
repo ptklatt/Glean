@@ -6,10 +6,11 @@ using Glean.Enumerators;
 namespace Glean.Extensions;
 
 /// <summary>
-/// Extensions for enumerating reference tables (AssemblyReference, TypeReference, MemberReference).
+/// Extensions for enumerating reference tables (AssemblyReference, ModuleReference, TypeReference, MemberReference).
 /// </summary>
 /// <remarks>
-/// Direct raw table enumeration (<c>MetadataReader.AssemblyReferences</c>, <c>TypeReferences</c>, <c>MemberReferences</c>).
+/// Direct raw table enumeration (<c>MetadataReader.AssemblyReferences</c>, <c>ModuleRef</c>,
+/// <c>TypeReferences</c>, and <c>MemberReferences</c>).
 /// </remarks>
 public static class ReferenceTableExtensions
 {
@@ -20,9 +21,27 @@ public static class ReferenceTableExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static AssemblyReferenceEnumerator EnumerateAssemblyReferences(this MetadataReader reader)
     {
-        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
 
         return AssemblyReferenceEnumerator.Create(reader, reader.AssemblyReferences);
+    }
+
+    /// <summary>
+    /// Enumerates all module references in the metadata.
+    /// Returns struct enumerator for zero allocation iteration.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static ModuleReferenceEnumerator EnumerateModuleReferences(this MetadataReader reader)
+    {
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        return ModuleReferenceEnumerator.Create(reader);
     }
 
     /// <summary>
@@ -32,7 +51,10 @@ public static class ReferenceTableExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static TypeReferenceEnumerator EnumerateTypeReferences(this MetadataReader reader)
     {
-        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
 
         return TypeReferenceEnumerator.Create(reader, reader.TypeReferences);
     }
@@ -44,7 +66,10 @@ public static class ReferenceTableExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MemberReferenceEnumerator EnumerateMemberReferences(this MetadataReader reader)
     {
-        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
 
         return MemberReferenceEnumerator.Create(reader, reader.MemberReferences);
     }
