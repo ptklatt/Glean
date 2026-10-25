@@ -102,8 +102,10 @@ public sealed class DirectoryAssemblyResolverTests
         Assert.Equal("DependencyLibrary", resolvedReader!.GetString(resolvedReader.GetAssemblyDefinition().Name));
     }
 
-    [Fact]
-    public void TryResolve_ModuleReference_PrefersRequestingAssemblyDirectory()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TryResolve_ModuleReference_PrefersRequestingAssemblyDirectory(bool useLoader)
     {
         using var workspace = new TemporaryDirectory();
 
@@ -190,27 +192,31 @@ public sealed class DirectoryAssemblyResolverTests
                 """)
             .BuildMetadataScope();
 
-        using var resolver = new DirectoryAssemblyResolver(hostADir, hostBDir);
+        using IDisposable owner = useLoader
+            ? new AssemblyLoader(hostADir, hostBDir)
+            : new DirectoryAssemblyResolver(hostADir, hostBDir);
+        var assemblyResolver = (IAssemblyReferenceResolver)owner;
+        var moduleResolver = (IModuleResolver)owner;
 
         var hostAReference = ResolutionTestHelpers.FindAssemblyReferenceHandle(consumer.Reader, "HostA");
-        Assert.True(resolver.TryResolve(hostAReference, consumer.Reader, out var hostAReader));
+        Assert.True(assemblyResolver.TryResolve(hostAReference, consumer.Reader, out var hostAReader));
         Assert.NotNull(hostAReader);
 
         var hostBReference = ResolutionTestHelpers.FindAssemblyReferenceHandle(consumer.Reader, "HostB");
-        Assert.True(resolver.TryResolve(hostBReference, consumer.Reader, out var hostBReader));
+        Assert.True(assemblyResolver.TryResolve(hostBReference, consumer.Reader, out var hostBReader));
         Assert.NotNull(hostBReader);
 
         Assert.Equal(1, hostAReader!.GetTableRowCount(TableIndex.ModuleRef));
         Assert.Equal(1, hostBReader!.GetTableRowCount(TableIndex.ModuleRef));
 
         var hostAModuleReference = MetadataTokens.ModuleReferenceHandle(1);
-        Assert.True(resolver.TryResolve(hostAModuleReference, hostAReader, out var moduleAReader));
+        Assert.True(moduleResolver.TryResolve(hostAModuleReference, hostAReader, out var moduleAReader));
         Assert.NotNull(moduleAReader);
         Assert.False(moduleAReader!.IsAssembly);
         Assert.True(ContainsType(moduleAReader, "ModuleA", "SharedType"));
 
         var hostBModuleReference = MetadataTokens.ModuleReferenceHandle(1);
-        Assert.True(resolver.TryResolve(hostBModuleReference, hostBReader, out var moduleBReader));
+        Assert.True(moduleResolver.TryResolve(hostBModuleReference, hostBReader, out var moduleBReader));
         Assert.NotNull(moduleBReader);
         Assert.False(moduleBReader!.IsAssembly);
         Assert.True(ContainsType(moduleBReader, "ModuleB", "SharedType"));

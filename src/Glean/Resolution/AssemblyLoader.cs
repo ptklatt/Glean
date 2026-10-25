@@ -56,11 +56,17 @@ public readonly struct AssemblyDependencyLoadFailure
 /// and public key token to match. Mismatched candidates are skipped while probing continues.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Advanced)]
-public sealed class AssemblyLoader : IDisposable
+public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver, IDisposable
 {
     private readonly List<PEReader> _ownedPEReaders = new();
     private readonly Dictionary<string, MetadataReader> _loadedReaders = new(StringComparer.OrdinalIgnoreCase);
-    private readonly string[] _searchPaths;
+    private readonly Dictionary<MetadataReader, string> _pathByReader = new(ReferenceEqualityComparer<MetadataReader>.Instance);
+    private readonly Dictionary<AssemblyIdentityKey, MetadataReader> _assemblyCache = new();
+    private readonly Dictionary<MetadataReader, Dictionary<string, MetadataReader>> _moduleCacheByRequestingReader =
+        new(ReferenceEqualityComparer<MetadataReader>.Instance);
+    private readonly List<string> _searchPaths = new();
+    private readonly HashSet<string> _searchPathSet = new(StringComparer.OrdinalIgnoreCase);
+    private readonly string? _targetFrameworkMoniker;
     private bool _disposed;
 
     /// <summary>
@@ -68,9 +74,38 @@ public sealed class AssemblyLoader : IDisposable
     /// </summary>
     /// <param name="searchPaths">Directories to probe when resolving dependencies.</param>
     public AssemblyLoader(params string[] searchPaths)
+        : this(targetFrameworkMoniker: null, searchPaths)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a loader that also probes NuGet layouts for the specified target framework.
+    /// </summary>
+    /// <param name="targetFrameworkMoniker">The target framework, or null to disable NuGet layout probing.</param>
+    /// <param name="searchPaths">Directories to probe when resolving dependencies.</param>
+    public AssemblyLoader(string? targetFrameworkMoniker, string[] searchPaths)
     {
         ArgumentNullException.ThrowIfNull(searchPaths);
-        _searchPaths = searchPaths;
+        _targetFrameworkMoniker = string.IsNullOrWhiteSpace(targetFrameworkMoniker) ? null : targetFrameworkMoniker;
+        foreach (var path in searchPaths)
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                AddSearchPathCore(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds a directory to probe when resolving dependencies.
+    /// </summary>
+    /// <param name="directory">The directory path to add.</param>
+    public void AddSearchPath(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) { throw new ArgumentException("Directory path cannot be null or empty.", nameof(directory)); }
+        if (_disposed) { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
+
+        AddSearchPathCore(directory);
     }
 
     /// <summary>
@@ -108,27 +143,7 @@ public sealed class AssemblyLoader : IDisposable
         }
 
         var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        PEReader peReader;
-        try
-        {
-            peReader = new PEReader(stream);
-        }
-        catch (Exception)
-        {
-            stream.Dispose();
-            throw;
-        }
-
-        if (!peReader.HasMetadata)
-        {
-            peReader.Dispose();
-            throw new BadImageFormatException($"File has no metadata: {path}");
-        }
-
-        var reader = peReader.GetMetadataReader();
-        _ownedPEReaders.Add(peReader);
-        _loadedReaders[fullPath] = reader;
-        return reader;
+        return LoadStream(fullPath, stream);
     }
 
     /// <summary>
@@ -149,6 +164,8 @@ public sealed class AssemblyLoader : IDisposable
         if (path == null) { throw new ArgumentNullException(nameof(path)); }
         if (_disposed)    { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         var fullPath = Path.GetFullPath(path);
         if (!File.Exists(fullPath)) { throw new FileNotFoundException($"Assembly file not found: {path}", path); }
 
@@ -158,29 +175,93 @@ public sealed class AssemblyLoader : IDisposable
         }
 
         var bytes = await File.ReadAllBytesAsync(fullPath, cancellationToken).ConfigureAwait(false);
-
         var stream = new MemoryStream(bytes, writable: false);
-        PEReader peReader;
+        return LoadStream(fullPath, stream);
+    }
+
+    private MetadataReader LoadStream(string fullPath, Stream stream)
+    {
+        PEReader? peReader = null;
         try
         {
             peReader = new PEReader(stream);
+            if (!peReader.HasMetadata)
+            {
+                throw new BadImageFormatException($"File has no metadata: {fullPath}");
+            }
+
+            var reader = peReader.GetMetadataReader();
+            _ownedPEReaders.Add(peReader);
+            _loadedReaders[fullPath] = reader;
+            _pathByReader[reader] = fullPath;
+            return reader;
         }
-        catch (Exception)
+        catch
         {
+            peReader?.Dispose();
             stream.Dispose();
             throw;
         }
+    }
 
-        if (!peReader.HasMetadata)
+    /// <summary>
+    /// Attempts to resolve an assembly reference using exact identity matching.
+    /// </summary>
+    public bool TryResolve(AssemblyReferenceHandle reference, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+    {
+        if (requestingReader == null) { throw new ArgumentNullException(nameof(requestingReader)); }
+        if (_disposed) { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
+
+        var identity = AssemblyIdentityKey.FromReference(requestingReader.GetAssemblyReference(reference), requestingReader);
+        if (_assemblyCache.TryGetValue(identity, out resolvedReader))
         {
-            peReader.Dispose();
-            throw new BadImageFormatException($"File has no metadata: {path}");
+            return true;
         }
 
-        var reader = peReader.GetMetadataReader();
-        _ownedPEReaders.Add(peReader);
-        _loadedReaders[fullPath] = reader;
-        return reader;
+        var result = TryLoadDependency(identity, _searchPaths, CancellationToken.None);
+        resolvedReader = result.Reader;
+        if (!result.IsSuccess)
+        {
+            return false;
+        }
+
+        _assemblyCache[identity] = resolvedReader!;
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to resolve a module, preferring the requesting reader's directory.
+    /// </summary>
+    public bool TryResolve(ModuleReferenceHandle reference, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+    {
+        if (requestingReader == null) { throw new ArgumentNullException(nameof(requestingReader)); }
+        if (_disposed) { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
+
+        var moduleName = requestingReader.GetString(requestingReader.GetModuleReference(reference).Name);
+        if (!_moduleCacheByRequestingReader.TryGetValue(requestingReader, out var cache))
+        {
+            cache = new Dictionary<string, MetadataReader>(StringComparer.OrdinalIgnoreCase);
+            _moduleCacheByRequestingReader[requestingReader] = cache;
+        }
+
+        if (cache.TryGetValue(moduleName, out resolvedReader))
+        {
+            return true;
+        }
+
+        foreach (var path in EnumerateModuleCandidatePaths(requestingReader, moduleName))
+        {
+            var candidate = TryLoadCandidate(path, CancellationToken.None);
+            if (candidate.IsSuccess && !candidate.Reader!.IsAssembly)
+            {
+                resolvedReader = candidate.Reader;
+                cache[moduleName] = candidate.Reader!;
+                return true;
+            }
+        }
+
+        resolvedReader = null;
+        return false;
     }
 
     /// <summary>
@@ -218,7 +299,7 @@ public sealed class AssemblyLoader : IDisposable
         if (_disposed)    { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
 
         var entryReader = LoadFile(path, cancellationToken);
-        var (effectiveSearchPaths, set, queue) = InitializeClosureLoad(path, entryReader);
+        var (effectiveSearchPaths, set, queue, visited) = InitializeClosureLoad(path, entryReader);
 
         while (queue.Count > 0)
         {
@@ -241,13 +322,9 @@ public sealed class AssemblyLoader : IDisposable
                     continue;
                 }
 
-                if (!TryAddLoadedDependency(set, loadResult.Reader!, asmName, loadResult.Path, onSkippedDependency))
+                if (visited.Add(loadResult.Reader!))
                 {
-                    continue;
-                }
-
-                if (!loadResult.AlreadyLoaded)
-                {
+                    set.Add(loadResult.Reader!);
                     queue.Enqueue(loadResult.Reader!);
                 }
             }
@@ -291,7 +368,7 @@ public sealed class AssemblyLoader : IDisposable
         if (_disposed)    { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
 
         var entryReader = await LoadFileAsync(path, cancellationToken).ConfigureAwait(false);
-        var (effectiveSearchPaths, set, queue) = InitializeClosureLoad(path, entryReader);
+        var (effectiveSearchPaths, set, queue, visited) = InitializeClosureLoad(path, entryReader);
 
         while (queue.Count > 0)
         {
@@ -314,13 +391,9 @@ public sealed class AssemblyLoader : IDisposable
                     continue;
                 }
 
-                if (!TryAddLoadedDependency(set, loadResult.Reader!, asmName, loadResult.Path, onSkippedDependency))
+                if (visited.Add(loadResult.Reader!))
                 {
-                    continue;
-                }
-
-                if (!loadResult.AlreadyLoaded)
-                {
+                    set.Add(loadResult.Reader!);
                     queue.Enqueue(loadResult.Reader!);
                 }
             }
@@ -329,7 +402,7 @@ public sealed class AssemblyLoader : IDisposable
         return (entryReader, set);
     }
 
-    private (List<string> SearchPaths, AssemblySet Set, Queue<MetadataReader> Queue) InitializeClosureLoad(
+    private (List<string> SearchPaths, AssemblySet Set, Queue<MetadataReader> Queue, HashSet<MetadataReader> Visited) InitializeClosureLoad(
         string entryAssemblyPath,
         MetadataReader entryReader)
     {
@@ -338,8 +411,9 @@ public sealed class AssemblyLoader : IDisposable
 
         var queue = new Queue<MetadataReader>();
         queue.Enqueue(entryReader);
+        var visited = new HashSet<MetadataReader>(ReferenceEqualityComparer<MetadataReader>.Instance) { entryReader };
 
-        return (BuildEffectiveSearchPaths(entryAssemblyPath), set, queue);
+        return (BuildEffectiveSearchPaths(entryAssemblyPath), set, queue, visited);
     }
 
     private List<string> BuildEffectiveSearchPaths(string entryAssemblyPath)
@@ -455,7 +529,7 @@ public sealed class AssemblyLoader : IDisposable
         var fullPath = Path.GetFullPath(candidatePath);
         if (_loadedReaders.TryGetValue(fullPath, out var existing))
         {
-            return DependencyLoadResult.FromAlreadyLoaded(existing, fullPath);
+            return DependencyLoadResult.Loaded(existing, fullPath);
         }
 
         try
@@ -471,6 +545,10 @@ public sealed class AssemblyLoader : IDisposable
         {
             return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.BadImageFormat, fullPath);
         }
+        catch (UnauthorizedAccessException)
+        {
+            return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.IoError, fullPath);
+        }
     }
 
     private DependencyLoadResult TryLoadCandidate(string candidatePath, CancellationToken cancellationToken)
@@ -480,7 +558,7 @@ public sealed class AssemblyLoader : IDisposable
         var fullPath = Path.GetFullPath(candidatePath);
         if (_loadedReaders.TryGetValue(fullPath, out var existing))
         {
-            return DependencyLoadResult.FromAlreadyLoaded(existing, fullPath);
+            return DependencyLoadResult.Loaded(existing, fullPath);
         }
 
         try
@@ -496,14 +574,82 @@ public sealed class AssemblyLoader : IDisposable
         {
             return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.BadImageFormat, fullPath);
         }
+        catch (UnauthorizedAccessException)
+        {
+            return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.IoError, fullPath);
+        }
     }
 
-    private static IEnumerable<string> EnumerateCandidatePaths(string assemblyName, IReadOnlyList<string> searchPaths)
+    private IEnumerable<string> EnumerateCandidatePaths(string assemblyName, IReadOnlyList<string> searchPaths)
     {
         foreach (var searchPath in searchPaths)
         {
             yield return Path.Combine(searchPath, assemblyName + ".dll");
             yield return Path.Combine(searchPath, assemblyName + ".exe");
+
+            if (_targetFrameworkMoniker == null)
+            {
+                continue;
+            }
+
+            yield return Path.Combine(searchPath, "lib", _targetFrameworkMoniker, assemblyName + ".dll");
+            yield return Path.Combine(searchPath, "ref", _targetFrameworkMoniker, assemblyName + ".dll");
+
+            var runtimesDirectory = Path.Combine(searchPath, "runtimes");
+            if (Directory.Exists(runtimesDirectory))
+            {
+                foreach (var runtimeDirectory in Directory.EnumerateDirectories(runtimesDirectory))
+                {
+                    yield return Path.Combine(runtimeDirectory, "lib", _targetFrameworkMoniker, assemblyName + ".dll");
+                }
+            }
+        }
+    }
+
+    private void AddSearchPathCore(string directory)
+    {
+        var fullPath = Path.GetFullPath(directory);
+        if (_searchPathSet.Add(fullPath))
+        {
+            _searchPaths.Add(fullPath);
+        }
+    }
+
+    private IEnumerable<string> EnumerateModuleCandidatePaths(MetadataReader requestingReader, string moduleName)
+    {
+        string? requestingDirectory = null;
+        if (_pathByReader.TryGetValue(requestingReader, out var requestingPath))
+        {
+            requestingDirectory = Path.GetDirectoryName(requestingPath);
+            if (!string.IsNullOrEmpty(requestingDirectory))
+            {
+                foreach (var path in EnumerateModuleCandidatePathsFromDirectory(requestingDirectory, moduleName))
+                {
+                    yield return path;
+                }
+            }
+        }
+
+        foreach (var directory in _searchPaths)
+        {
+            if (string.Equals(directory, requestingDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var path in EnumerateModuleCandidatePathsFromDirectory(directory, moduleName))
+            {
+                yield return path;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateModuleCandidatePathsFromDirectory(string directory, string moduleName)
+    {
+        yield return Path.Combine(directory, moduleName);
+        if (Path.GetExtension(moduleName).Length == 0)
+        {
+            yield return Path.Combine(directory, moduleName + ".netmodule");
         }
     }
 
@@ -520,30 +666,6 @@ public sealed class AssemblyLoader : IDisposable
             loadResult.Path));
     }
 
-    private static bool TryAddLoadedDependency(
-        AssemblySet set,
-        MetadataReader dependencyReader,
-        string assemblyName,
-        string? loadedPath,
-        Action<AssemblyDependencyLoadFailure>? onSkippedDependency)
-    {
-        // AssemblySet.Add silently overwrites on identity collision.
-        // It throws ArgumentException only for non assembly metadata such as netmodules.
-        try
-        {
-            set.Add(dependencyReader);
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            onSkippedDependency?.Invoke(new AssemblyDependencyLoadFailure(
-                assemblyName,
-                AssemblyDependencyLoadFailureKind.NotAssembly,
-                loadedPath));
-            return false;
-        }
-    }
-
     /// <summary>
     /// Disposes all opened file handles and PEReaders.
     /// </summary>
@@ -558,6 +680,11 @@ public sealed class AssemblyLoader : IDisposable
 
         _ownedPEReaders.Clear();
         _loadedReaders.Clear();
+        _pathByReader.Clear();
+        _assemblyCache.Clear();
+        _moduleCacheByRequestingReader.Clear();
+        _searchPaths.Clear();
+        _searchPathSet.Clear();
         _disposed = true;
     }
 
@@ -566,13 +693,11 @@ public sealed class AssemblyLoader : IDisposable
         private DependencyLoadResult(
             MetadataReader? reader,
             string? path,
-            bool alreadyLoaded,
             AssemblyDependencyLoadFailureKind failureKind,
             bool hasFailure)
         {
             Reader = reader;
             Path = path;
-            AlreadyLoaded = alreadyLoaded;
             FailureKind = failureKind;
             HasFailure = hasFailure;
         }
@@ -581,27 +706,20 @@ public sealed class AssemblyLoader : IDisposable
 
         public string? Path { get; }
 
-        public bool AlreadyLoaded { get; }
-
         public AssemblyDependencyLoadFailureKind FailureKind { get; }
 
         public bool HasFailure { get; }
 
         public bool IsSuccess => Reader != null;
 
-        public static DependencyLoadResult FromAlreadyLoaded(MetadataReader reader, string path)
-        {
-            return new DependencyLoadResult(reader, path, alreadyLoaded: true, default, hasFailure: false);
-        }
-
         public static DependencyLoadResult Loaded(MetadataReader reader, string path)
         {
-            return new DependencyLoadResult(reader, path, alreadyLoaded: false, default, hasFailure: false);
+            return new DependencyLoadResult(reader, path, default, hasFailure: false);
         }
 
         public static DependencyLoadResult Failed(AssemblyDependencyLoadFailureKind failureKind, string? path)
         {
-            return new DependencyLoadResult(reader: null, path, alreadyLoaded: false, failureKind, hasFailure: true);
+            return new DependencyLoadResult(reader: null, path, failureKind, hasFailure: true);
         }
     }
 }
