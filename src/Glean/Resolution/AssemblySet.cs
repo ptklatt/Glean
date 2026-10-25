@@ -669,7 +669,7 @@ public sealed partial class AssemblySet : IDisposable
     {
         if (!_moduleByNameByRequestingReader.TryGetValue(requestingReader, out var scopedModules))
         {
-            scopedModules = new Dictionary<string, MetadataReader>(StringComparer.OrdinalIgnoreCase);
+            scopedModules = new Dictionary<string, MetadataReader>(FileSystemPathComparison.Comparer);
             _moduleByNameByRequestingReader[requestingReader] = scopedModules;
         }
 
@@ -689,7 +689,7 @@ public sealed partial class AssemblySet : IDisposable
         {
             var candidateModRefHandle = MetadataTokens.ModuleReferenceHandle(row);
             var candidateModRef = requestingReader.GetModuleReference(candidateModRefHandle);
-            if (!string.Equals(requestingReader.GetString(candidateModRef.Name), moduleName, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(requestingReader.GetString(candidateModRef.Name), moduleName, FileSystemPathComparison.Comparison))
             {
                 continue;
             }

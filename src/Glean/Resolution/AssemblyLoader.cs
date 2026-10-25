@@ -59,12 +59,12 @@ public readonly struct AssemblyDependencyLoadFailure
 public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver, IModuleNameResolver, IAssemblyPathProvider, IDisposable
 {
     private readonly List<PEReader> _ownedPEReaders = new();
-    private readonly Dictionary<string, MetadataReader> _loadedReaders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MetadataReader> _loadedReaders = new(FileSystemPathComparison.Comparer);
     private readonly Dictionary<MetadataReader, string> _pathByReader = new(ReferenceEqualityComparer<MetadataReader>.Instance);
     private readonly Dictionary<MetadataReader, Dictionary<string, MetadataReader>> _moduleCacheByRequestingReader =
         new(ReferenceEqualityComparer<MetadataReader>.Instance);
     private readonly List<string> _searchPaths = new();
-    private readonly HashSet<string> _searchPathSet = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _searchPathSet = new(FileSystemPathComparison.Comparer);
     private readonly string? _targetFrameworkMoniker;
     private readonly AssemblyBindingPolicy _bindingPolicy = AssemblyBindingPolicy.Exact;
     private bool _disposed;
@@ -277,7 +277,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
     {
         if (!_moduleCacheByRequestingReader.TryGetValue(requestingReader, out var cache))
         {
-            cache = new Dictionary<string, MetadataReader>(StringComparer.OrdinalIgnoreCase);
+            cache = new Dictionary<string, MetadataReader>(FileSystemPathComparison.Comparer);
             _moduleCacheByRequestingReader[requestingReader] = cache;
         }
 
@@ -459,11 +459,11 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         var entryDir = Path.GetDirectoryName(Path.GetFullPath(entryAssemblyPath));
         if (!string.IsNullOrEmpty(entryDir))
         {
-            var normalizedEntryDir = Path.GetFullPath(entryDir);
+            var normalizedEntryDir = FileSystemPathComparison.NormalizeDirectory(entryDir);
             bool found = false;
             foreach (var sp in effectiveSearchPaths)
             {
-                if (string.Equals(Path.GetFullPath(sp), normalizedEntryDir, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(sp, normalizedEntryDir, FileSystemPathComparison.Comparison))
                 {
                     found = true;
                     break;
@@ -674,7 +674,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
 
     private void AddSearchPathCore(string directory)
     {
-        var fullPath = Path.GetFullPath(directory);
+        var fullPath = FileSystemPathComparison.NormalizeDirectory(directory);
         if (_searchPathSet.Add(fullPath))
         {
             _searchPaths.Add(fullPath);
@@ -712,6 +712,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
             requestingDirectory = Path.GetDirectoryName(requestingPath);
             if (!string.IsNullOrEmpty(requestingDirectory))
             {
+                requestingDirectory = FileSystemPathComparison.NormalizeDirectory(requestingDirectory);
                 foreach (var path in EnumerateModuleCandidatePathsFromDirectory(requestingDirectory, moduleName))
                 {
                     yield return path;
@@ -721,7 +722,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
 
         foreach (var directory in searchPaths)
         {
-            if (string.Equals(directory, requestingDirectory, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(directory, requestingDirectory, FileSystemPathComparison.Comparison))
             {
                 continue;
             }
