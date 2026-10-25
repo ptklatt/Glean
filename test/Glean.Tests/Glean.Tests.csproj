@@ -20,6 +20,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Glean\Glean.csproj" />
+        <ProjectReference Include="..\..\samples\CustomIrSample\CustomIrSample.csproj" />
     </ItemGroup>
 
 </Project>
