@@ -30,6 +30,8 @@ public sealed class MemberResolutionIndex
     private readonly Dictionary<(MetadataReader Reader, int MethodRow),    MethodSignatureShape>           _methodDefinitionShapes = new();
     private readonly Dictionary<(MetadataReader Reader, int MemberRefRow), MethodSignature<TypeSignature>> _memberReferenceSignatures = new();
     private readonly Dictionary<(MetadataReader Reader, int MethodRow),    MethodSignature<TypeSignature>> _methodDefinitionSignatures = new();
+    private readonly Dictionary<(MetadataReader Reader, int MemberRefRow), TypeSignature> _memberReferenceFieldSignatures = new();
+    private readonly Dictionary<(MetadataReader Reader, int FieldRow), TypeSignature> _fieldDefinitionSignatures = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MemberResolutionIndex"/> class.
@@ -58,6 +60,8 @@ public sealed class MemberResolutionIndex
         _methodDefinitionShapes.Clear();
         _memberReferenceSignatures.Clear();
         _methodDefinitionSignatures.Clear();
+        _memberReferenceFieldSignatures.Clear();
+        _fieldDefinitionSignatures.Clear();
     }
 
     /// <summary>
@@ -246,6 +250,36 @@ public sealed class MemberResolutionIndex
         var method = reader.GetMethodDefinition(methodDefinitionHandle);
         signature = method.DecodeSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
         _methodDefinitionSignatures[key] = signature;
+        return signature;
+    }
+
+    internal TypeSignature GetOrDecodeMemberReferenceFieldSignature(
+        MetadataReader reader,
+        MemberReferenceHandle memberReferenceHandle)
+    {
+        var key = (reader, MetadataTokens.GetRowNumber(memberReferenceHandle));
+        if (!_memberReferenceFieldSignatures.TryGetValue(key, out var signature))
+        {
+            signature = reader.GetMemberReference(memberReferenceHandle)
+                .DecodeFieldSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
+            _memberReferenceFieldSignatures[key] = signature;
+        }
+
+        return signature;
+    }
+
+    internal TypeSignature GetOrDecodeFieldDefinitionSignature(
+        MetadataReader reader,
+        FieldDefinitionHandle fieldDefinitionHandle)
+    {
+        var key = (reader, MetadataTokens.GetRowNumber(fieldDefinitionHandle));
+        if (!_fieldDefinitionSignatures.TryGetValue(key, out var signature))
+        {
+            signature = reader.GetFieldDefinition(fieldDefinitionHandle)
+                .DecodeSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
+            _fieldDefinitionSignatures[key] = signature;
+        }
+
         return signature;
     }
 

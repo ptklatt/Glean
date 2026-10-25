@@ -93,6 +93,7 @@ internal static class SignatureComparison
     {
         if (referenceSignature.Header.RawValue != definitionSignature.Header.RawValue) { return false; }
         if (referenceSignature.GenericParameterCount != definitionSignature.GenericParameterCount) { return false; }
+        if (referenceSignature.RequiredParameterCount != definitionSignature.RequiredParameterCount) { return false; }
         if (referenceSignature.ParameterTypes.Length != definitionSignature.ParameterTypes.Length) { return false; }
         if (!TypeSignaturesEquivalent(referenceSignature.ReturnType, definitionSignature.ReturnType)) { return false; }
         
@@ -392,6 +393,7 @@ internal static class SignatureComparison
 
         if (l.Header.RawValue != r.Header.RawValue)                         { return false; }
         if (l.GenericParameterCount != r.GenericParameterCount)             { return false; }
+        if (l.RequiredParameterCount != r.RequiredParameterCount) { return false; }
         if (l.ParameterTypes.Length != r.ParameterTypes.Length)             { return false; }
         if (!TypeSignaturesEquivalent(l.ReturnType, r.ReturnType)) { return false; }
 

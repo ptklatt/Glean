@@ -28,6 +28,8 @@ public sealed partial class AssemblySet
     /// <remarks>
     /// This may populate caches in both <see cref="AssemblySet"/> and the provided
     /// <see cref="MemberResolutionIndex"/>.
+    /// Fields and methods match by name and signature. Multiple matching definitions return
+    /// <see cref="ResolutionFailureReason.MemberAmbiguous"/> from the overload with a failure reason.
     /// </remarks>
     public bool TryResolveMember(
         MetadataReader reader,
@@ -93,6 +95,7 @@ public sealed partial class AssemblySet
             case MemberReferenceKind.Field:
                 return TryResolveIndexedFieldMember(
                     reader,
+                    memberRefHandle,
                     memberRef,
                     parentReader,
                     parentTypeHandle,
@@ -124,6 +127,8 @@ public sealed partial class AssemblySet
     /// For repeated member resolution or large types, build a <see cref="MemberResolutionIndex"/> and use
     /// <see cref="TryResolveMember(MetadataReader, MemberReferenceHandle, MemberResolutionIndex, out MetadataReader, out EntityHandle, CancellationToken)"/>
     /// to narrow the candidate set before semantic comparison.
+    /// Fields and methods match by name and signature. Multiple matching definitions return
+    /// <see cref="ResolutionFailureReason.MemberAmbiguous"/> from the overload with a failure reason.
     /// </remarks>
     public bool TryResolveMember(
         MetadataReader reader,
@@ -254,6 +259,7 @@ public sealed partial class AssemblySet
 
     private bool TryResolveIndexedFieldMember(
         MetadataReader reader,
+        MemberReferenceHandle memberRefHandle,
         MemberReference memberRef,
         MetadataReader parentReader,
         TypeDefinitionHandle parentTypeHandle,
@@ -266,20 +272,22 @@ public sealed partial class AssemblySet
     {
         var memberName = reader.GetString(memberRef.Name);
         var candidates = index.GetFieldCandidates(parentReader, parentTypeHandle, memberName);
-        if (candidates.Length > 0)
+        TypeSignature? referenceSignature = null;
+        FieldDefinitionHandle match = default;
+        int matchCount = 0;
+
+        foreach (var fieldHandle in candidates)
         {
-            var fieldHandle = candidates[0];
-            CacheResolvedField(cacheKey, parentReader, fieldHandle, replacementVersion);
-            targetReader = parentReader;
-            targetHandle = fieldHandle;
-            reason = ResolutionFailureReason.None;
-            return true;
+            if (FieldSignaturesMatch(reader, memberRefHandle, memberRef, parentReader,
+                fieldHandle, index, ref referenceSignature))
+            {
+                match = fieldHandle;
+                matchCount++;
+            }
         }
 
-        targetReader = null!;
-        targetHandle = default;
-        reason = ResolutionFailureReason.MemberNotFound;
-        return false;
+        return TryFinalizeFieldResolution(match, matchCount, cacheKey, parentReader,
+            replacementVersion, out targetReader, out targetHandle, out reason);
     }
 
     private bool TryResolveScannedMethodMember(
@@ -349,6 +357,9 @@ public sealed partial class AssemblySet
         var parentType = parentReader.GetTypeDefinition(parentTypeHandle);
         bool sameParentReader = ReferenceEquals(parentReader, reader);
         string? memberName = null;
+        TypeSignature? referenceSignature = null;
+        FieldDefinitionHandle match = default;
+        int matchCount = 0;
 
         foreach (var fieldHandle in parentType.GetFields())
         {
@@ -358,16 +369,70 @@ public sealed partial class AssemblySet
                 continue;
             }
 
-            CacheResolvedField(cacheKey, parentReader, fieldHandle, replacementVersion);
+            if (FieldSignaturesMatch(reader, default, memberRef, parentReader,
+                fieldHandle, null, ref referenceSignature))
+            {
+                match = fieldHandle;
+                matchCount++;
+            }
+        }
+
+        return TryFinalizeFieldResolution(match, matchCount, cacheKey, parentReader,
+            replacementVersion, out targetReader, out targetHandle, out reason);
+    }
+
+    private static bool FieldSignaturesMatch(
+        MetadataReader referenceReader,
+        MemberReferenceHandle memberRefHandle,
+        MemberReference memberRef,
+        MetadataReader definitionReader,
+        FieldDefinitionHandle fieldHandle,
+        MemberResolutionIndex? index,
+        ref TypeSignature? referenceSignature)
+    {
+        var field = definitionReader.GetFieldDefinition(fieldHandle);
+        if (SignatureBlobsEqual(referenceReader, memberRef.Signature, definitionReader, field.Signature))
+        {
+            return true;
+        }
+
+        TypeSignature definitionSignature;
+        if ((index != null) && index.CacheSemanticSignatures)
+        {
+            referenceSignature ??= index.GetOrDecodeMemberReferenceFieldSignature(referenceReader, memberRefHandle);
+            definitionSignature = index.GetOrDecodeFieldDefinitionSignature(definitionReader, fieldHandle);
+        }
+        else
+        {
+            referenceSignature ??= memberRef.DecodeFieldSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
+            definitionSignature = field.DecodeSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
+        }
+
+        return TypeSignaturesEquivalent(referenceSignature, definitionSignature);
+    }
+
+    private bool TryFinalizeFieldResolution(
+        FieldDefinitionHandle match,
+        int matchCount,
+        MemberResolutionCacheKey cacheKey,
+        MetadataReader parentReader,
+        int replacementVersion,
+        out MetadataReader targetReader,
+        out EntityHandle targetHandle,
+        out ResolutionFailureReason reason)
+    {
+        if (matchCount == 1)
+        {
+            CacheResolvedField(cacheKey, parentReader, match, replacementVersion);
             targetReader = parentReader;
-            targetHandle = fieldHandle;
+            targetHandle = match;
             reason = ResolutionFailureReason.None;
             return true;
         }
 
         targetReader = null!;
         targetHandle = default;
-        reason = ResolutionFailureReason.MemberNotFound;
+        reason = matchCount > 1 ? ResolutionFailureReason.MemberAmbiguous : ResolutionFailureReason.MemberNotFound;
         return false;
     }
 
@@ -447,33 +512,18 @@ public sealed partial class AssemblySet
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
     {
-        if ((resolution.ExactMatchCount == 1) && resolution.ExactMatch.HasValue)
+        int matchCount = resolution.ExactMatchCount + resolution.SemanticMatchCount;
+        if (matchCount == 1)
         {
-            CacheResolvedMethod(cacheKey, parentReader, resolution.ExactMatch.Value, replacementVersion);
+            var match = resolution.ExactMatch ?? resolution.SemanticMatch.GetValueOrDefault();
+            CacheResolvedMethod(cacheKey, parentReader, match, replacementVersion);
             targetReader = parentReader;
-            targetHandle = resolution.ExactMatch.Value;
+            targetHandle = match;
             reason = ResolutionFailureReason.None;
             return true;
         }
 
-        if (resolution.ExactMatchCount > 1)
-        {
-            targetReader = null!;
-            targetHandle = default;
-            reason = ResolutionFailureReason.MemberAmbiguous;
-            return false;
-        }
-
-        if ((resolution.SemanticMatchCount == 1) && resolution.SemanticMatch.HasValue)
-        {
-            CacheResolvedMethod(cacheKey, parentReader, resolution.SemanticMatch.Value, replacementVersion);
-            targetReader = parentReader;
-            targetHandle = resolution.SemanticMatch.Value;
-            reason = ResolutionFailureReason.None;
-            return true;
-        }
-
-        if (resolution.SemanticMatchCount > 1)
+        if (matchCount > 1)
         {
             targetReader = null!;
             targetHandle = default;
