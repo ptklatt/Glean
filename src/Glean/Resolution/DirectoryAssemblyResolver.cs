@@ -16,7 +16,7 @@ namespace Glean.Resolution;
 /// This type is not thread safe.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Advanced)]
-public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IModuleResolver, IAssemblyPathProvider, IDisposable
+public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IModuleResolver, IModuleNameResolver, IAssemblyPathProvider, IDisposable
 {
     private readonly AssemblyLoader _loader;
     private bool _disposed;
@@ -87,6 +87,14 @@ public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IMod
         if (_disposed) { throw new ObjectDisposedException(nameof(DirectoryAssemblyResolver)); }
 
         return _loader.TryResolve(reference, requestingReader, out resolvedReader);
+    }
+
+    bool IModuleNameResolver.TryResolve(string moduleName, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+    {
+        if (requestingReader == null) { throw new ArgumentNullException(nameof(requestingReader)); }
+        if (_disposed) { throw new ObjectDisposedException(nameof(DirectoryAssemblyResolver)); }
+
+        return ((IModuleNameResolver)_loader).TryResolve(moduleName, requestingReader, out resolvedReader);
     }
 
     /// <summary>

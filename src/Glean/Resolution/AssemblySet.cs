@@ -702,6 +702,16 @@ public sealed partial class AssemblySet : IDisposable
             }
         }
 
+        // An AssemblyFile export can name a module without a ModuleRef row.
+        if ((_moduleResolver is IModuleNameResolver nameResolver) &&
+            nameResolver.TryResolve(moduleName, requestingReader, out var namedModuleReader) &&
+            (namedModuleReader != null))
+        {
+            scopedModules[moduleName] = namedModuleReader;
+            resolvedReader = namedModuleReader;
+            return true;
+        }
+
         resolvedReader = null!;
         return false;
     }

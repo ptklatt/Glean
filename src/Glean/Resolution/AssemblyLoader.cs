@@ -56,7 +56,7 @@ public readonly struct AssemblyDependencyLoadFailure
 /// to explicitly allow version substitutions after all exact candidates have been probed.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Advanced)]
-public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver, IAssemblyPathProvider, IDisposable
+public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver, IModuleNameResolver, IAssemblyPathProvider, IDisposable
 {
     private readonly List<PEReader> _ownedPEReaders = new();
     private readonly Dictionary<string, MetadataReader> _loadedReaders = new(StringComparer.OrdinalIgnoreCase);
@@ -262,6 +262,19 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         if (_disposed) { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
 
         var moduleName = requestingReader.GetString(requestingReader.GetModuleReference(reference).Name);
+        return TryResolveModuleByName(moduleName, requestingReader, out resolvedReader);
+    }
+
+    bool IModuleNameResolver.TryResolve(string moduleName, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+    {
+        if (requestingReader == null) { throw new ArgumentNullException(nameof(requestingReader)); }
+        if (_disposed) { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
+
+        return TryResolveModuleByName(moduleName, requestingReader, out resolvedReader);
+    }
+
+    private bool TryResolveModuleByName(string moduleName, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+    {
         if (!_moduleCacheByRequestingReader.TryGetValue(requestingReader, out var cache))
         {
             cache = new Dictionary<string, MetadataReader>(StringComparer.OrdinalIgnoreCase);
@@ -273,18 +286,12 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
             return true;
         }
 
-        foreach (var path in EnumerateModuleCandidatePaths(requestingReader, moduleName))
+        if (TryLoadModule(requestingReader, moduleName, _searchPaths, out resolvedReader))
         {
-            var candidate = TryLoadCandidate(path, CancellationToken.None);
-            if (candidate.IsSuccess && !candidate.Reader!.IsAssembly)
-            {
-                resolvedReader = candidate.Reader;
-                cache[moduleName] = candidate.Reader!;
-                return true;
-            }
+            cache[moduleName] = resolvedReader!;
+            return true;
         }
 
-        resolvedReader = null;
         return false;
     }
 
@@ -435,7 +442,8 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         MetadataReader entryReader)
     {
         var searchPaths = BuildEffectiveSearchPaths(entryAssemblyPath);
-        var set = new AssemblySet(_bindingPolicy, new ClosureAssemblyResolver(this, searchPaths));
+        var resolver = new ClosureAssemblyResolver(this, searchPaths);
+        var set = new AssemblySet(_bindingPolicy, resolver, resolver);
         set.Add(entryReader);
 
         var queue = new Queue<MetadataReader>();
@@ -673,7 +681,30 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         }
     }
 
-    private IEnumerable<string> EnumerateModuleCandidatePaths(MetadataReader requestingReader, string moduleName)
+    private bool TryLoadModule(
+        MetadataReader requestingReader,
+        string moduleName,
+        IReadOnlyList<string> searchPaths,
+        out MetadataReader? resolvedReader)
+    {
+        foreach (var path in EnumerateModuleCandidatePaths(requestingReader, moduleName, searchPaths))
+        {
+            var candidate = TryLoadCandidate(path, CancellationToken.None);
+            if (candidate.IsSuccess && !candidate.Reader!.IsAssembly)
+            {
+                resolvedReader = candidate.Reader;
+                return true;
+            }
+        }
+
+        resolvedReader = null;
+        return false;
+    }
+
+    private IEnumerable<string> EnumerateModuleCandidatePaths(
+        MetadataReader requestingReader,
+        string moduleName,
+        IReadOnlyList<string> searchPaths)
     {
         string? requestingDirectory = null;
         if (_pathByReader.TryGetValue(requestingReader, out var requestingPath))
@@ -688,7 +719,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
             }
         }
 
-        foreach (var directory in _searchPaths)
+        foreach (var directory in searchPaths)
         {
             if (string.Equals(directory, requestingDirectory, StringComparison.OrdinalIgnoreCase))
             {
@@ -745,7 +776,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         _disposed = true;
     }
 
-    private sealed class ClosureAssemblyResolver : IAssemblyReferenceResolver, IAssemblyPathProvider
+    private sealed class ClosureAssemblyResolver : IAssemblyReferenceResolver, IModuleResolver, IModuleNameResolver, IAssemblyPathProvider
     {
         private readonly AssemblyLoader _loader;
         private readonly IReadOnlyList<string> _searchPaths;
@@ -763,6 +794,28 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
             var result = _loader.TryLoadDependency(identity, _searchPaths, CancellationToken.None);
             resolvedReader = result.Reader;
             return result.IsSuccess;
+        }
+
+        public bool TryResolve(ModuleReferenceHandle reference, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+        {
+            if (requestingReader == null) { throw new ArgumentNullException(nameof(requestingReader)); }
+            ObjectDisposedException.ThrowIf(_loader._disposed, _loader);
+
+            var moduleName = requestingReader.GetString(requestingReader.GetModuleReference(reference).Name);
+            return TryResolveModuleByName(moduleName, requestingReader, out resolvedReader);
+        }
+
+        private bool TryResolveModuleByName(string moduleName, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+        {
+            return _loader.TryLoadModule(requestingReader, moduleName, _searchPaths, out resolvedReader);
+        }
+
+        bool IModuleNameResolver.TryResolve(string moduleName, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+        {
+            if (requestingReader == null) { throw new ArgumentNullException(nameof(requestingReader)); }
+            ObjectDisposedException.ThrowIf(_loader._disposed, _loader);
+
+            return TryResolveModuleByName(moduleName, requestingReader, out resolvedReader);
         }
 
         public string? GetAssemblyPath(MetadataReader reader) => _loader.GetAssemblyPath(reader);

@@ -21,3 +21,8 @@ public interface IModuleResolver
     /// <returns>True if the module was resolved; otherwise false.</returns>
     bool TryResolve(ModuleReferenceHandle reference, MetadataReader requestingReader, out MetadataReader? resolvedReader);
 }
+
+internal interface IModuleNameResolver
+{
+    bool TryResolve(string moduleName, MetadataReader requestingReader, out MetadataReader? resolvedReader);
+}
