@@ -59,6 +59,7 @@ public sealed partial class AssemblySet
         ct.ThrowIfCancellationRequested();
 
         reason = ResolutionFailureReason.None;
+        int replacementVersion = _cacheVersion;
         var cacheKey = CreateMemberResolutionCacheKey(reader, memberRefHandle);
         if (TryGetCachedMemberResolution(cacheKey, out targetReader, out targetHandle))
         {
@@ -84,6 +85,7 @@ public sealed partial class AssemblySet
                     parentTypeHandle,
                     index,
                     cacheKey,
+                    replacementVersion,
                     out targetReader,
                     out targetHandle,
                     out reason);
@@ -96,6 +98,7 @@ public sealed partial class AssemblySet
                     parentTypeHandle,
                     index,
                     cacheKey,
+                    replacementVersion,
                     out targetReader,
                     out targetHandle,
                     out reason);
@@ -149,6 +152,7 @@ public sealed partial class AssemblySet
         ct.ThrowIfCancellationRequested();
 
         reason = ResolutionFailureReason.None;
+        int replacementVersion = _cacheVersion;
         var cacheKey = CreateMemberResolutionCacheKey(reader, memberRefHandle);
         if (TryGetCachedMemberResolution(cacheKey, out targetReader, out targetHandle))
         {
@@ -172,6 +176,7 @@ public sealed partial class AssemblySet
                     parentReader,
                     parentTypeHandle,
                     cacheKey,
+                    replacementVersion,
                     out targetReader,
                     out targetHandle,
                     out reason);
@@ -183,6 +188,7 @@ public sealed partial class AssemblySet
                     parentReader,
                     parentTypeHandle,
                     cacheKey,
+                    replacementVersion,
                     out targetReader,
                     out targetHandle,
                     out reason);
@@ -203,6 +209,7 @@ public sealed partial class AssemblySet
         TypeDefinitionHandle parentTypeHandle,
         MemberResolutionIndex index,
         MemberResolutionCacheKey cacheKey,
+        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
@@ -239,6 +246,7 @@ public sealed partial class AssemblySet
             resolution,
             cacheKey,
             parentReader,
+            replacementVersion,
             out targetReader,
             out targetHandle,
             out reason);
@@ -251,6 +259,7 @@ public sealed partial class AssemblySet
         TypeDefinitionHandle parentTypeHandle,
         MemberResolutionIndex index,
         MemberResolutionCacheKey cacheKey,
+        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
@@ -260,7 +269,7 @@ public sealed partial class AssemblySet
         if (candidates.Length > 0)
         {
             var fieldHandle = candidates[0];
-            CacheResolvedField(cacheKey, parentReader, fieldHandle);
+            CacheResolvedField(cacheKey, parentReader, fieldHandle, replacementVersion);
             targetReader = parentReader;
             targetHandle = fieldHandle;
             reason = ResolutionFailureReason.None;
@@ -279,6 +288,7 @@ public sealed partial class AssemblySet
         MetadataReader parentReader,
         TypeDefinitionHandle parentTypeHandle,
         MemberResolutionCacheKey cacheKey,
+        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
@@ -319,6 +329,7 @@ public sealed partial class AssemblySet
             resolution,
             cacheKey,
             parentReader,
+            replacementVersion,
             out targetReader,
             out targetHandle,
             out reason);
@@ -330,6 +341,7 @@ public sealed partial class AssemblySet
         MetadataReader parentReader,
         TypeDefinitionHandle parentTypeHandle,
         MemberResolutionCacheKey cacheKey,
+        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
@@ -346,7 +358,7 @@ public sealed partial class AssemblySet
                 continue;
             }
 
-            CacheResolvedField(cacheKey, parentReader, fieldHandle);
+            CacheResolvedField(cacheKey, parentReader, fieldHandle, replacementVersion);
             targetReader = parentReader;
             targetHandle = fieldHandle;
             reason = ResolutionFailureReason.None;
@@ -398,8 +410,14 @@ public sealed partial class AssemblySet
     private void CacheResolvedMethod(
         MemberResolutionCacheKey cacheKey,
         MetadataReader targetReader,
-        MethodDefinitionHandle targetHandle)
+        MethodDefinitionHandle targetHandle,
+        int replacementVersion)
     {
+        if (replacementVersion != _cacheVersion)
+        {
+            return;
+        }
+
         int targetRow = MetadataTokens.GetRowNumber(targetHandle);
         _memberResolutionCache[cacheKey] = new MemberResolutionCacheValue(targetReader, targetRow | MethodDefinitionHandleFlag);
     }
@@ -408,8 +426,14 @@ public sealed partial class AssemblySet
     private void CacheResolvedField(
         MemberResolutionCacheKey cacheKey,
         MetadataReader targetReader,
-        FieldDefinitionHandle targetHandle)
+        FieldDefinitionHandle targetHandle,
+        int replacementVersion)
     {
+        if (replacementVersion != _cacheVersion)
+        {
+            return;
+        }
+
         int targetRow = MetadataTokens.GetRowNumber(targetHandle);
         _memberResolutionCache[cacheKey] = new MemberResolutionCacheValue(targetReader, targetRow);
     }
@@ -418,13 +442,14 @@ public sealed partial class AssemblySet
         in MethodResolutionState resolution,
         MemberResolutionCacheKey cacheKey,
         MetadataReader parentReader,
+        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
     {
         if ((resolution.ExactMatchCount == 1) && resolution.ExactMatch.HasValue)
         {
-            CacheResolvedMethod(cacheKey, parentReader, resolution.ExactMatch.Value);
+            CacheResolvedMethod(cacheKey, parentReader, resolution.ExactMatch.Value, replacementVersion);
             targetReader = parentReader;
             targetHandle = resolution.ExactMatch.Value;
             reason = ResolutionFailureReason.None;
@@ -441,7 +466,7 @@ public sealed partial class AssemblySet
 
         if ((resolution.SemanticMatchCount == 1) && resolution.SemanticMatch.HasValue)
         {
-            CacheResolvedMethod(cacheKey, parentReader, resolution.SemanticMatch.Value);
+            CacheResolvedMethod(cacheKey, parentReader, resolution.SemanticMatch.Value, replacementVersion);
             targetReader = parentReader;
             targetHandle = resolution.SemanticMatch.Value;
             reason = ResolutionFailureReason.None;

@@ -75,6 +75,7 @@ public sealed partial class AssemblySet : IDisposable
     private readonly IAssemblyReferenceResolver? _resolver;
     private readonly IModuleResolver? _moduleResolver;
 
+    private int _cacheVersion;
     private bool _disposed;
 
     /// <summary>
@@ -152,6 +153,7 @@ public sealed partial class AssemblySet : IDisposable
 
         var assemblyDef = reader.GetAssemblyDefinition();
         var identityKey = AssemblyIdentityKey.FromDefinition(assemblyDef, reader);
+        bool refreshesIdentity = _assemblyByIdentity.ContainsKey(identityKey);
 
         _assemblyByIdentity[identityKey] = reader;
         if (!_assemblyKeysBySimpleName.TryGetValue(identityKey.Name, out var identities))
@@ -165,6 +167,17 @@ public sealed partial class AssemblySet : IDisposable
             identities.Add(identityKey);
         }
 
+        if (refreshesIdentity)
+        {
+            // An active resolution may finish with its earlier binding. Detach its
+            // caches so later resolutions cannot reuse that result.
+            _cacheVersion++;
+            ClearCaches();
+        }
+        else
+        {
+            InvalidateCachesAfterAdd();
+        }
     }
 
     /// <summary>
@@ -188,6 +201,29 @@ public sealed partial class AssemblySet : IDisposable
     /// The returned collection reflects the current state of the set.
     /// </remarks>
     public IReadOnlyCollection<MetadataReader> RegisteredAssemblies => _assemblyByIdentity.Values;
+
+    private void InvalidateCachesAfterAdd()
+    {
+        // Keep containers held by resolutions that called Add through a resolver.
+        foreach (var cache in _typeResolutionCacheByRequestingReader.Values)
+        {
+            cache.Clear();
+        }
+
+        foreach (var cache in _assemblyReferenceCacheByRequestingReader.Values)
+        {
+            Array.Clear(cache);
+        }
+
+        _memberResolutionCache.Clear();
+        _typeLookupByReader.Clear();
+        _forwarderLookupByReader.Clear();
+
+        foreach (var cache in _moduleByNameByRequestingReader.Values)
+        {
+            cache.Clear();
+        }
+    }
 
     /// <summary>
     /// Clears internal resolution and lookup caches while keeping registered assemblies.
