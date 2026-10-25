@@ -30,6 +30,8 @@ public sealed partial class AssemblySet
     /// <see cref="MemberResolutionIndex"/>.
     /// Fields and methods match by name and signature. Multiple matching definitions return
     /// <see cref="ResolutionFailureReason.MemberAmbiguous"/> from the overload with a failure reason.
+    /// Class owners search base types; interface owners search parent interfaces by level.
+    /// The first matching level wins. Constructors and type initializers inspect only the owner.
     /// </remarks>
     public bool TryResolveMember(
         MetadataReader reader,
@@ -76,46 +78,13 @@ public sealed partial class AssemblySet
             return false;
         }
 
-        switch (memberRef.GetKind())
-        {
-            case MemberReferenceKind.Method:
-                return TryResolveIndexedMethodMember(
-                    reader,
-                    memberRefHandle,
-                    memberRef,
-                    parentReader,
-                    parentTypeHandle,
-                    index,
-                    cacheKey,
-                    replacementVersion,
-                    out targetReader,
-                    out targetHandle,
-                    out reason);
-
-            case MemberReferenceKind.Field:
-                return TryResolveIndexedFieldMember(
-                    reader,
-                    memberRefHandle,
-                    memberRef,
-                    parentReader,
-                    parentTypeHandle,
-                    index,
-                    cacheKey,
-                    replacementVersion,
-                    out targetReader,
-                    out targetHandle,
-                    out reason);
-
-            default:
-                targetReader = null!;
-                targetHandle = default;
-                reason = ResolutionFailureReason.MemberNotFound;
-                return false;
-        }
+        return TryResolveMemberHierarchy(reader, memberRefHandle, memberRef, parentReader,
+            parentTypeHandle, index, cacheKey, replacementVersion,
+            out targetReader, out targetHandle, out reason, ct);
     }
 
     /// <summary>
-    /// Resolves a member reference by scanning the parent type.
+    /// Resolves a member reference by scanning the owner and its base types or parent interfaces.
     /// </summary>
     /// <param name="reader">The MetadataReader containing the reference.</param>
     /// <param name="memberRefHandle">The MemberReferenceHandle to resolve.</param>
@@ -129,6 +98,8 @@ public sealed partial class AssemblySet
     /// to narrow the candidate set before semantic comparison.
     /// Fields and methods match by name and signature. Multiple matching definitions return
     /// <see cref="ResolutionFailureReason.MemberAmbiguous"/> from the overload with a failure reason.
+    /// Class owners search base types; interface owners search parent interfaces by level.
+    /// The first matching level wins. Constructors and type initializers inspect only the owner.
     /// </remarks>
     public bool TryResolveMember(
         MetadataReader reader,
@@ -141,7 +112,7 @@ public sealed partial class AssemblySet
     }
 
     /// <summary>
-    /// Resolves a member reference by scanning the parent type, returning a failure reason on false.
+    /// Resolves a member reference through its hierarchy, returning a failure reason on false.
     /// </summary>
     public bool TryResolveMember(
         MetadataReader reader,
@@ -172,38 +143,9 @@ public sealed partial class AssemblySet
             return false;
         }
 
-        switch (memberRef.GetKind())
-        {
-            case MemberReferenceKind.Method:
-                return TryResolveScannedMethodMember(
-                    reader,
-                    memberRef,
-                    parentReader,
-                    parentTypeHandle,
-                    cacheKey,
-                    replacementVersion,
-                    out targetReader,
-                    out targetHandle,
-                    out reason);
-
-            case MemberReferenceKind.Field:
-                return TryResolveScannedFieldMember(
-                    reader,
-                    memberRef,
-                    parentReader,
-                    parentTypeHandle,
-                    cacheKey,
-                    replacementVersion,
-                    out targetReader,
-                    out targetHandle,
-                    out reason);
-
-            default:
-                targetReader = null!;
-                targetHandle = default;
-                reason = ResolutionFailureReason.MemberNotFound;
-                return false;
-        }
+        return TryResolveMemberHierarchy(reader, memberRefHandle, memberRef, parentReader,
+            parentTypeHandle, null, cacheKey, replacementVersion,
+            out targetReader, out targetHandle, out reason, ct);
     }
 
     private bool TryResolveIndexedMethodMember(
@@ -213,11 +155,10 @@ public sealed partial class AssemblySet
         MetadataReader parentReader,
         TypeDefinitionHandle parentTypeHandle,
         MemberResolutionIndex index,
-        MemberResolutionCacheKey cacheKey,
-        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
-        out ResolutionFailureReason reason)
+        out ResolutionFailureReason reason,
+        SignatureDecodeContext definitionContext)
     {
         var memberName = reader.GetString(memberRef.Name);
         var candidates = index.GetMethodCandidatesWithShapes(parentReader, parentTypeHandle, memberName);
@@ -243,15 +184,14 @@ public sealed partial class AssemblySet
                 candidate.Shape,
                 index,
                 ref decodedReferenceSignature,
-                ref hasDecodedReferenceSignature);
+                ref hasDecodedReferenceSignature,
+                definitionContext);
             resolution.Record(match, candidate.Handle);
         }
 
         return TryFinalizeMethodResolution(
             resolution,
-            cacheKey,
             parentReader,
-            replacementVersion,
             out targetReader,
             out targetHandle,
             out reason);
@@ -264,11 +204,10 @@ public sealed partial class AssemblySet
         MetadataReader parentReader,
         TypeDefinitionHandle parentTypeHandle,
         MemberResolutionIndex index,
-        MemberResolutionCacheKey cacheKey,
-        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
-        out ResolutionFailureReason reason)
+        out ResolutionFailureReason reason,
+        SignatureDecodeContext definitionContext)
     {
         var memberName = reader.GetString(memberRef.Name);
         var candidates = index.GetFieldCandidates(parentReader, parentTypeHandle, memberName);
@@ -279,15 +218,15 @@ public sealed partial class AssemblySet
         foreach (var fieldHandle in candidates)
         {
             if (FieldSignaturesMatch(reader, memberRefHandle, memberRef, parentReader,
-                fieldHandle, index, ref referenceSignature))
+                fieldHandle, index, ref referenceSignature, definitionContext))
             {
                 match = fieldHandle;
                 matchCount++;
             }
         }
 
-        return TryFinalizeFieldResolution(match, matchCount, cacheKey, parentReader,
-            replacementVersion, out targetReader, out targetHandle, out reason);
+        return TryFinalizeFieldResolution(match, matchCount, parentReader,
+            out targetReader, out targetHandle, out reason);
     }
 
     private bool TryResolveScannedMethodMember(
@@ -295,11 +234,10 @@ public sealed partial class AssemblySet
         MemberReference memberRef,
         MetadataReader parentReader,
         TypeDefinitionHandle parentTypeHandle,
-        MemberResolutionCacheKey cacheKey,
-        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
-        out ResolutionFailureReason reason)
+        out ResolutionFailureReason reason,
+        SignatureDecodeContext definitionContext)
     {
         var parentType = parentReader.GetTypeDefinition(parentTypeHandle);
         bool sameParentReader = ReferenceEquals(parentReader, reader);
@@ -329,15 +267,14 @@ public sealed partial class AssemblySet
                 candidateShape: default,
                 index: null,
                 ref decodedReferenceSignature,
-                ref hasDecodedReferenceSignature);
+                ref hasDecodedReferenceSignature,
+                definitionContext);
             resolution.Record(match, methodHandle);
         }
 
         return TryFinalizeMethodResolution(
             resolution,
-            cacheKey,
             parentReader,
-            replacementVersion,
             out targetReader,
             out targetHandle,
             out reason);
@@ -348,11 +285,10 @@ public sealed partial class AssemblySet
         MemberReference memberRef,
         MetadataReader parentReader,
         TypeDefinitionHandle parentTypeHandle,
-        MemberResolutionCacheKey cacheKey,
-        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
-        out ResolutionFailureReason reason)
+        out ResolutionFailureReason reason,
+        SignatureDecodeContext definitionContext)
     {
         var parentType = parentReader.GetTypeDefinition(parentTypeHandle);
         bool sameParentReader = ReferenceEquals(parentReader, reader);
@@ -370,28 +306,30 @@ public sealed partial class AssemblySet
             }
 
             if (FieldSignaturesMatch(reader, default, memberRef, parentReader,
-                fieldHandle, null, ref referenceSignature))
+                fieldHandle, null, ref referenceSignature, definitionContext))
             {
                 match = fieldHandle;
                 matchCount++;
             }
         }
 
-        return TryFinalizeFieldResolution(match, matchCount, cacheKey, parentReader,
-            replacementVersion, out targetReader, out targetHandle, out reason);
+        return TryFinalizeFieldResolution(match, matchCount, parentReader,
+            out targetReader, out targetHandle, out reason);
     }
 
-    private static bool FieldSignaturesMatch(
+    private bool FieldSignaturesMatch(
         MetadataReader referenceReader,
         MemberReferenceHandle memberRefHandle,
         MemberReference memberRef,
         MetadataReader definitionReader,
         FieldDefinitionHandle fieldHandle,
         MemberResolutionIndex? index,
-        ref TypeSignature? referenceSignature)
+        ref TypeSignature? referenceSignature,
+        SignatureDecodeContext definitionContext)
     {
         var field = definitionReader.GetFieldDefinition(fieldHandle);
-        if (SignatureBlobsEqual(referenceReader, memberRef.Signature, definitionReader, field.Signature))
+        if ((definitionContext.TypeArguments.IsDefaultOrEmpty) &&
+            SignatureBlobsEqual(referenceReader, memberRef.Signature, definitionReader, field.Signature))
         {
             return true;
         }
@@ -400,30 +338,29 @@ public sealed partial class AssemblySet
         if ((index != null) && index.CacheSemanticSignatures)
         {
             referenceSignature ??= index.GetOrDecodeMemberReferenceFieldSignature(referenceReader, memberRefHandle);
-            definitionSignature = index.GetOrDecodeFieldDefinitionSignature(definitionReader, fieldHandle);
+            definitionSignature = definitionContext.TypeArguments.IsDefaultOrEmpty
+                ? index.GetOrDecodeFieldDefinitionSignature(definitionReader, fieldHandle)
+                : field.DecodeSignature(SignatureTypeProvider.Instance, definitionContext);
         }
         else
         {
             referenceSignature ??= memberRef.DecodeFieldSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
-            definitionSignature = field.DecodeSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
+            definitionSignature = field.DecodeSignature(SignatureTypeProvider.Instance, definitionContext);
         }
 
-        return TypeSignaturesEquivalent(referenceSignature, definitionSignature);
+        return TypeSignaturesEquivalent(referenceSignature, definitionSignature, this);
     }
 
-    private bool TryFinalizeFieldResolution(
+    private static bool TryFinalizeFieldResolution(
         FieldDefinitionHandle match,
         int matchCount,
-        MemberResolutionCacheKey cacheKey,
         MetadataReader parentReader,
-        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
     {
         if (matchCount == 1)
         {
-            CacheResolvedField(cacheKey, parentReader, match, replacementVersion);
             targetReader = parentReader;
             targetHandle = match;
             reason = ResolutionFailureReason.None;
@@ -503,11 +440,9 @@ public sealed partial class AssemblySet
         _memberResolutionCache[cacheKey] = new MemberResolutionCacheValue(targetReader, targetRow);
     }
 
-    private bool TryFinalizeMethodResolution(
+    private static bool TryFinalizeMethodResolution(
         in MethodResolutionState resolution,
-        MemberResolutionCacheKey cacheKey,
         MetadataReader parentReader,
-        int replacementVersion,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
@@ -516,7 +451,6 @@ public sealed partial class AssemblySet
         if (matchCount == 1)
         {
             var match = resolution.ExactMatch ?? resolution.SemanticMatch.GetValueOrDefault();
-            CacheResolvedMethod(cacheKey, parentReader, match, replacementVersion);
             targetReader = parentReader;
             targetHandle = match;
             reason = ResolutionFailureReason.None;
@@ -537,7 +471,7 @@ public sealed partial class AssemblySet
         return false;
     }
 
-    private static MethodCandidateMatch EvaluateMethodCandidate(
+    private MethodCandidateMatch EvaluateMethodCandidate(
         MetadataReader referenceReader,
         MemberReferenceHandle memberRefHandle,
         MemberReference memberRef,
@@ -550,7 +484,8 @@ public sealed partial class AssemblySet
         MemberResolutionIndex.MethodSignatureShape candidateShape,
         MemberResolutionIndex? index,
         ref MethodSignature<TypeSignature> decodedReferenceSignature,
-        ref bool hasDecodedReferenceSignature)
+        ref bool hasDecodedReferenceSignature,
+        SignatureDecodeContext definitionContext)
     {
         var referenceSignature = memberRef.Signature;
         if (hasReferenceShape && hasCandidateShape && (referenceShape != candidateShape))
@@ -558,7 +493,8 @@ public sealed partial class AssemblySet
             return MethodCandidateMatch.None;
         }
 
-        if (SignatureBlobsEqual(referenceReader, referenceSignature, definitionReader, definitionSignature))
+        if ((definitionContext.TypeArguments.IsDefaultOrEmpty) &&
+            SignatureBlobsEqual(referenceReader, referenceSignature, definitionReader, definitionSignature))
         {
             return MethodCandidateMatch.Exact;
         }
@@ -575,8 +511,10 @@ public sealed partial class AssemblySet
         if ((index != null) && index.CacheSemanticSignatures)
         {
             var referenceDecoded = index.GetOrDecodeMemberReferenceSignature(referenceReader, memberRefHandle);
-            var definitionDecoded = index.GetOrDecodeMethodDefinitionSignature(definitionReader, methodHandle);
-            semanticMatches = MethodSignaturesSemanticallyMatch(referenceDecoded, definitionDecoded);
+            var definitionDecoded = definitionContext.TypeArguments.IsDefaultOrEmpty
+                ? index.GetOrDecodeMethodDefinitionSignature(definitionReader, methodHandle)
+                : definitionReader.GetMethodDefinition(methodHandle).DecodeSignature(SignatureTypeProvider.Instance, definitionContext);
+            semanticMatches = MethodSignaturesSemanticallyMatch(referenceDecoded, definitionDecoded, this);
         }
         else
         {
@@ -587,7 +525,8 @@ public sealed partial class AssemblySet
             }
 
             var method = definitionReader.GetMethodDefinition(methodHandle);
-            semanticMatches = MethodSignaturesSemanticallyMatch(decodedReferenceSignature, method);
+            var definitionDecoded = method.DecodeSignature(SignatureTypeProvider.Instance, definitionContext);
+            semanticMatches = MethodSignaturesSemanticallyMatch(decodedReferenceSignature, definitionDecoded, this);
         }
 
         return semanticMatches ? MethodCandidateMatch.Semantic : MethodCandidateMatch.None;

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 
+using Glean.Contexts;
 using Glean.Providers;
 using Glean.Signatures;
 
@@ -89,17 +90,18 @@ internal static class SignatureComparison
 
     internal static bool MethodSignaturesSemanticallyMatch(
         MethodSignature<TypeSignature> referenceSignature,
-        MethodSignature<TypeSignature> definitionSignature)
+        MethodSignature<TypeSignature> definitionSignature,
+        AssemblySet? assemblySet = null)
     {
         if (referenceSignature.Header.RawValue != definitionSignature.Header.RawValue) { return false; }
         if (referenceSignature.GenericParameterCount != definitionSignature.GenericParameterCount) { return false; }
         if (referenceSignature.RequiredParameterCount != definitionSignature.RequiredParameterCount) { return false; }
         if (referenceSignature.ParameterTypes.Length != definitionSignature.ParameterTypes.Length) { return false; }
-        if (!TypeSignaturesEquivalent(referenceSignature.ReturnType, definitionSignature.ReturnType)) { return false; }
+        if (!TypeSignaturesEquivalent(referenceSignature.ReturnType, definitionSignature.ReturnType, assemblySet)) { return false; }
         
         for (int i = 0; i < referenceSignature.ParameterTypes.Length; i++)
         {
-            if (!TypeSignaturesEquivalent(referenceSignature.ParameterTypes[i], definitionSignature.ParameterTypes[i]))
+            if (!TypeSignaturesEquivalent(referenceSignature.ParameterTypes[i], definitionSignature.ParameterTypes[i], assemblySet))
             {
                 return false;
             }
@@ -117,7 +119,7 @@ internal static class SignatureComparison
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool TypeSignaturesEquivalent(TypeSignature left, TypeSignature right)
+    internal static bool TypeSignaturesEquivalent(TypeSignature left, TypeSignature right, AssemblySet? assemblySet = null)
     {
         if (ReferenceEquals(left, right))
         {
@@ -127,7 +129,21 @@ internal static class SignatureComparison
         if (TryGetNamedTypeIdentity(left, out var leftIdentity) &&
             TryGetNamedTypeIdentity(right, out var rightIdentity))
         {
-            return leftIdentity.Matches(rightIdentity);
+            if (leftIdentity.Matches(rightIdentity))
+            {
+                return true;
+            }
+
+            if ((assemblySet != null) &&
+                TryResolveNamedType(left, assemblySet, out var leftType) &&
+                TryResolveNamedType(right, assemblySet, out var rightType))
+            {
+                return leftType.Equals(rightType) ||
+                    CreateTypeDefinitionIdentity(new TypeDefinitionSignature(leftType.Reader, leftType.Handle))
+                        .Matches(CreateTypeDefinitionIdentity(new TypeDefinitionSignature(rightType.Reader, rightType.Handle)));
+            }
+
+            return false;
         }
 
         if (left.Kind != right.Kind) { return false; }
@@ -144,29 +160,29 @@ internal static class SignatureComparison
                 l.Index == r.Index,
 
             SZArraySignature l when right is SZArraySignature r =>
-                TypeSignaturesEquivalent(l.ElementType, r.ElementType),
+                TypeSignaturesEquivalent(l.ElementType, r.ElementType, assemblySet),
 
             ArraySignature l when right is ArraySignature r =>
                 ArrayShapesEquivalent(l.Shape, r.Shape) &&
-                TypeSignaturesEquivalent(l.ElementType, r.ElementType),
+                TypeSignaturesEquivalent(l.ElementType, r.ElementType, assemblySet),
 
             PointerSignature l when right is PointerSignature r =>
-                TypeSignaturesEquivalent(l.ElementType, r.ElementType),
+                TypeSignaturesEquivalent(l.ElementType, r.ElementType, assemblySet),
 
             ByRefSignature l when right is ByRefSignature r =>
-                TypeSignaturesEquivalent(l.ElementType, r.ElementType),
+                TypeSignaturesEquivalent(l.ElementType, r.ElementType, assemblySet),
 
             PinnedTypeSignature l when right is PinnedTypeSignature r =>
-                TypeSignaturesEquivalent(l.ElementType, r.ElementType),
+                TypeSignaturesEquivalent(l.ElementType, r.ElementType, assemblySet),
 
             GenericInstanceSignature l when right is GenericInstanceSignature r =>
-                GenericInstancesEquivalent(l, r),
+                GenericInstancesEquivalent(l, r, assemblySet),
 
             ModifiedTypeSignature l when right is ModifiedTypeSignature r =>
-                ModifiedTypesEquivalent(l, r),
+                ModifiedTypesEquivalent(l, r, assemblySet),
 
             FunctionPointerSignature l when right is FunctionPointerSignature r =>
-                FunctionPointerSignaturesEquivalent(l, r),
+                FunctionPointerSignaturesEquivalent(l, r, assemblySet),
 
             SentinelTypeSignature _ when right is SentinelTypeSignature =>
                 true,
@@ -176,6 +192,25 @@ internal static class SignatureComparison
 
             _ => false
         };
+    }
+
+    private static bool TryResolveNamedType(TypeSignature signature, AssemblySet assemblySet, out TypeContext type)
+    {
+        if (signature is TypeDefinitionSignature definition)
+        {
+            type = TypeContext.Create(definition.Reader, definition.Handle);
+            return true;
+        }
+
+        if ((signature is TypeReferenceSignature reference) &&
+            assemblySet.TryResolveType(reference.Reader, reference.Handle, out var reader, out var handle))
+        {
+            type = TypeContext.Create(reader, handle);
+            return true;
+        }
+
+        type = default;
+        return false;
     }
 
     internal static bool TryGetNamedTypeIdentity(TypeSignature signature, out NamedTypeIdentity identity)
@@ -294,12 +329,12 @@ internal static class SignatureComparison
                 }
 
             case HandleKind.ModuleDefinition:
-                return NamedTypeScopeIdentity.CreateCurrentModule(reader, GetModuleName(reader));
+                return CreateDefinitionScope(reader);
 
             case HandleKind.ModuleReference:
                 {
                     var moduleReference = reader.GetModuleReference((ModuleReferenceHandle)resolutionScope);
-                    return NamedTypeScopeIdentity.CreateModuleReference(reader.GetString(moduleReference.Name));
+                    return NamedTypeScopeIdentity.CreateModuleReference(reader, reader.GetString(moduleReference.Name));
                 }
 
             default:
@@ -341,14 +376,14 @@ internal static class SignatureComparison
         return true;
     }
 
-    internal static bool GenericInstancesEquivalent(GenericInstanceSignature left, GenericInstanceSignature right)
+    internal static bool GenericInstancesEquivalent(GenericInstanceSignature left, GenericInstanceSignature right, AssemblySet? assemblySet = null)
     {
-        if (!TypeSignaturesEquivalent(left.GenericType, right.GenericType)) { return false; }
+        if (!TypeSignaturesEquivalent(left.GenericType, right.GenericType, assemblySet)) { return false; }
         if (left.Arguments.Length != right.Arguments.Length) { return false; }
 
         for (int i = 0; i < left.Arguments.Length; i++)
         {
-            if (!TypeSignaturesEquivalent(left.Arguments[i], right.Arguments[i]))
+            if (!TypeSignaturesEquivalent(left.Arguments[i], right.Arguments[i], assemblySet))
             {
                 return false;
             }
@@ -357,9 +392,9 @@ internal static class SignatureComparison
         return true;
     }
 
-    internal static bool ModifiedTypesEquivalent(ModifiedTypeSignature left, ModifiedTypeSignature right)
+    internal static bool ModifiedTypesEquivalent(ModifiedTypeSignature left, ModifiedTypeSignature right, AssemblySet? assemblySet = null)
     {
-        if (!TypeSignaturesEquivalent(left.UnmodifiedType, right.UnmodifiedType)) { return false; }
+        if (!TypeSignaturesEquivalent(left.UnmodifiedType, right.UnmodifiedType, assemblySet)) { return false; }
 
         if ((left.RequiredModifiers.Length != right.RequiredModifiers.Length) ||
             (left.OptionalModifiers.Length != right.OptionalModifiers.Length))
@@ -369,7 +404,7 @@ internal static class SignatureComparison
 
         for (int i = 0; i < left.RequiredModifiers.Length; i++)
         {
-            if (!TypeSignaturesEquivalent(left.RequiredModifiers[i], right.RequiredModifiers[i]))
+            if (!TypeSignaturesEquivalent(left.RequiredModifiers[i], right.RequiredModifiers[i], assemblySet))
             {
                 return false;
             }
@@ -377,7 +412,7 @@ internal static class SignatureComparison
 
         for (int i = 0; i < left.OptionalModifiers.Length; i++)
         {
-            if (!TypeSignaturesEquivalent(left.OptionalModifiers[i], right.OptionalModifiers[i]))
+            if (!TypeSignaturesEquivalent(left.OptionalModifiers[i], right.OptionalModifiers[i], assemblySet))
             {
                 return false;
             }
@@ -386,7 +421,7 @@ internal static class SignatureComparison
         return true;
     }
 
-    internal static bool FunctionPointerSignaturesEquivalent(FunctionPointerSignature left, FunctionPointerSignature right)
+    internal static bool FunctionPointerSignaturesEquivalent(FunctionPointerSignature left, FunctionPointerSignature right, AssemblySet? assemblySet = null)
     {
         var l = left.Signature;
         var r = right.Signature;
@@ -395,11 +430,11 @@ internal static class SignatureComparison
         if (l.GenericParameterCount != r.GenericParameterCount)             { return false; }
         if (l.RequiredParameterCount != r.RequiredParameterCount) { return false; }
         if (l.ParameterTypes.Length != r.ParameterTypes.Length)             { return false; }
-        if (!TypeSignaturesEquivalent(l.ReturnType, r.ReturnType)) { return false; }
+        if (!TypeSignaturesEquivalent(l.ReturnType, r.ReturnType, assemblySet)) { return false; }
 
         for (int i = 0; i < l.ParameterTypes.Length; i++)
         {
-            if (!TypeSignaturesEquivalent(l.ParameterTypes[i], r.ParameterTypes[i]))
+            if (!TypeSignaturesEquivalent(l.ParameterTypes[i], r.ParameterTypes[i], assemblySet))
             {
                 return false;
             }
@@ -498,11 +533,11 @@ internal readonly struct NamedTypeScopeIdentity
             moduleName);
     }
 
-    public static NamedTypeScopeIdentity CreateModuleReference(string moduleName)
+    public static NamedTypeScopeIdentity CreateModuleReference(MetadataReader reader, string moduleName)
     {
         return new NamedTypeScopeIdentity(
             NamedTypeScopeKind.ModuleReference,
-            reader: null,
+            reader,
             default,
             moduleName);
     }
@@ -511,17 +546,7 @@ internal readonly struct NamedTypeScopeIdentity
     {
         if ((Kind == NamedTypeScopeKind.Assembly) && (other.Kind == NamedTypeScopeKind.Assembly))
         {
-            return AssemblyIdentity.MatchesLoosely(other.AssemblyIdentity);
-        }
-
-        if ((Kind == NamedTypeScopeKind.Assembly) && (other.Kind == NamedTypeScopeKind.CurrentModule))
-        {
-            return ReferenceEquals(Reader, other.Reader);
-        }
-
-        if ((Kind == NamedTypeScopeKind.CurrentModule) && (other.Kind == NamedTypeScopeKind.Assembly))
-        {
-            return ReferenceEquals(Reader, other.Reader);
+            return AssemblyIdentity.Equals(other.AssemblyIdentity);
         }
 
         if ((Kind == NamedTypeScopeKind.CurrentModule) && (other.Kind == NamedTypeScopeKind.CurrentModule))
@@ -531,17 +556,8 @@ internal readonly struct NamedTypeScopeIdentity
 
         if ((Kind == NamedTypeScopeKind.ModuleReference) && (other.Kind == NamedTypeScopeKind.ModuleReference))
         {
-            return string.Equals(ModuleName, other.ModuleName, StringComparison.OrdinalIgnoreCase);
-        }
-
-        if ((Kind == NamedTypeScopeKind.ModuleReference) && (other.Kind == NamedTypeScopeKind.CurrentModule))
-        {
-            return string.Equals(ModuleName, other.ModuleName, StringComparison.OrdinalIgnoreCase);
-        }
-
-        if ((Kind == NamedTypeScopeKind.CurrentModule) && (other.Kind == NamedTypeScopeKind.ModuleReference))
-        {
-            return string.Equals(ModuleName, other.ModuleName, StringComparison.OrdinalIgnoreCase);
+            return ReferenceEquals(Reader, other.Reader) &&
+                string.Equals(ModuleName, other.ModuleName, FileSystemPathComparison.Comparison);
         }
 
         return false;
