@@ -17,8 +17,10 @@ namespace Glean.Resolution;
 /// <see cref="AddRange"/> and any optional resolvers. It does not model <c>deps.json</c>,
 /// runtime binding redirects, or load contexts.
 /// <para/>
-/// When an exact assembly identity is not available, the set falls back to the highest
-/// registered version with the same simple name and public key token.
+/// Resolution requires an exact assembly identity by default. Explicitly selecting
+/// <see cref="AssemblyBindingPolicy.ExactThenCompatible"/> permits version substitutions
+/// after exact resolution. A resolver is consulted before registered fallback readers;
+/// manually registered fallback readers are considered in registration order.
 /// <para/>
 /// This type is not thread safe. Call <see cref="ClearCaches"/> to drop warmed lookup state
 /// without removing registered assemblies.
@@ -32,7 +34,11 @@ public sealed partial class AssemblySet : IDisposable
     private readonly Dictionary<AssemblyIdentityKey, MetadataReader> _assemblyByIdentity = new();
 
     // Simple name index to support identity aware fallback scans.
-    private readonly Dictionary<string, HashSet<AssemblyIdentityKey>> _assemblyKeysBySimpleName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<AssemblyIdentityKey>> _assemblyKeysBySimpleName = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly AssemblyBindingPolicy _bindingPolicy;
+    private readonly List<AssemblyBindingSubstitution> _bindingSubstitutions = new();
+    private readonly HashSet<AssemblyBindingSubstitution> _recordedSubstitutions = new();
 
     // Resolution cache: (requesting reader, handle row number) > (target reader, target handle row number)
     private readonly Dictionary<MetadataReader, Dictionary<int, TypeResolutionCacheValue>> _typeResolutionCacheByRequestingReader =
@@ -88,9 +94,49 @@ public sealed partial class AssemblySet : IDisposable
     public AssemblySet(
         IAssemblyReferenceResolver? resolver,
         IModuleResolver? moduleResolver)
+        : this(AssemblyBindingPolicy.Exact, resolver, moduleResolver)
     {
+    }
+
+    /// <summary>Initializes a set with an explicit assembly binding policy.</summary>
+    /// <param name="bindingPolicy">Identity matching policy for registered and resolved readers.</param>
+    /// <param name="resolver">Optional resolver for loading assemblies not pre registered.</param>
+    /// <param name="moduleResolver">Optional resolver for multi module assembly references.</param>
+    public AssemblySet(
+        AssemblyBindingPolicy bindingPolicy,
+        IAssemblyReferenceResolver? resolver = null,
+        IModuleResolver? moduleResolver = null)
+    {
+        if (!Enum.IsDefined(bindingPolicy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(bindingPolicy));
+        }
+
+        _bindingPolicy = bindingPolicy;
         _resolver = resolver;
         _moduleResolver = moduleResolver;
+        BindingSubstitutions = _bindingSubstitutions.AsReadOnly();
+    }
+
+    /// <summary>Gets the identity matching policy for this set.</summary>
+    public AssemblyBindingPolicy BindingPolicy => _bindingPolicy;
+
+    /// <summary>Gets the distinct version substitutions observed during eager or lazy resolution.</summary>
+    public IReadOnlyList<AssemblyBindingSubstitution> BindingSubstitutions { get; }
+
+    internal void RecordBindingSubstitution(AssemblyIdentityKey requested, MetadataReader resolvedReader, string? path)
+    {
+        var resolved = AssemblyIdentityKey.FromDefinition(resolvedReader.GetAssemblyDefinition(), resolvedReader);
+        if (requested.Equals(resolved))
+        {
+            return;
+        }
+
+        var substitution = new AssemblyBindingSubstitution(requested.ToString(), resolved.ToString(), path);
+        if (_recordedSubstitutions.Add(substitution))
+        {
+            _bindingSubstitutions.Add(substitution);
+        }
     }
 
     /// <summary>
@@ -110,11 +156,14 @@ public sealed partial class AssemblySet : IDisposable
         _assemblyByIdentity[identityKey] = reader;
         if (!_assemblyKeysBySimpleName.TryGetValue(identityKey.Name, out var identities))
         {
-            identities = new HashSet<AssemblyIdentityKey>();
+            identities = new List<AssemblyIdentityKey>();
             _assemblyKeysBySimpleName[identityKey.Name] = identities;
         }
 
-        identities.Add(identityKey);
+        if (!identities.Contains(identityKey))
+        {
+            identities.Add(identityKey);
+        }
 
     }
 
@@ -172,9 +221,8 @@ public sealed partial class AssemblySet : IDisposable
     /// <param name="ct">Token to cancel the resolution.</param>
     /// <returns>True if resolution succeeded; false otherwise.</returns>
     /// <remarks>
-    /// First queries may build internal lookup state. Repeated queries are served from cache.
-    /// When no exact version match is found, the highest available version with matching name and
-    /// public key token is used as a fallback.
+    /// First queries may build internal lookup state. Exact binding reuses cached resolution results.
+    /// The configured <see cref="BindingPolicy"/> determines whether version substitutions are allowed.
     /// </remarks>
     public bool TryResolveType(
         MetadataReader reader,
@@ -207,7 +255,7 @@ public sealed partial class AssemblySet : IDisposable
         int handleRow = MetadataTokens.GetRowNumber(typeRefHandle);
         var typeCache = GetOrCreateTypeResolutionCache(reader);
 
-        if (typeCache.TryGetValue(handleRow, out var cached))
+        if ((_bindingPolicy == AssemblyBindingPolicy.Exact) && typeCache.TryGetValue(handleRow, out var cached))
         {
             targetReader = cached.TargetReader;
             targetHandle = MetadataTokens.TypeDefinitionHandle(cached.TypeDefRow);
@@ -543,7 +591,7 @@ public sealed partial class AssemblySet : IDisposable
     {
         int asmRefRow = MetadataTokens.GetRowNumber(asmRefHandle);
         var refCache = GetOrCreateAssemblyReferenceCache(requestingReader);
-        if ((uint)asmRefRow < (uint)refCache.Length)
+        if ((_bindingPolicy == AssemblyBindingPolicy.Exact) && ((uint)asmRefRow < (uint)refCache.Length))
         {
             var cached = refCache[asmRefRow];
             if (cached != null)
@@ -565,49 +613,38 @@ public sealed partial class AssemblySet : IDisposable
             return true;
         }
 
-        var asmName = requestingReader.GetString(asmRef.Name);
         if ((_resolver != null) && _resolver.TryResolve(asmRefHandle, requestingReader, out var dynamicReader))
         {
-            if (dynamicReader != null)
+            if ((dynamicReader != null) && dynamicReader.IsAssembly)
             {
-                Add(dynamicReader);
-                resolvedReader = dynamicReader;
-                if ((uint)asmRefRow < (uint)refCache.Length)
+                var resolvedIdentity = AssemblyIdentityKey.FromDefinition(dynamicReader.GetAssemblyDefinition(), dynamicReader);
+                if (asmIdentity.Equals(resolvedIdentity) ||
+                    ((_bindingPolicy == AssemblyBindingPolicy.ExactThenCompatible) && asmIdentity.MatchesExceptVersion(resolvedIdentity)))
                 {
-                    refCache[asmRefRow] = resolvedReader;
+                    Add(dynamicReader);
+                    resolvedReader = dynamicReader;
+                    RecordBindingSubstitution(asmIdentity, resolvedReader, (_resolver as IAssemblyPathProvider)?.GetAssemblyPath(resolvedReader));
+                    if ((uint)asmRefRow < (uint)refCache.Length)
+                    {
+                        refCache[asmRefRow] = resolvedReader;
+                    }
+                    return true;
                 }
-                return true;
             }
         }
 
-        // Loose match fallback: same name + public key token, ignores version.
-        // Prefers the highest available version among matching candidates.
-        if (_assemblyKeysBySimpleName.TryGetValue(asmName, out var looseCandidates))
+        if ((_bindingPolicy == AssemblyBindingPolicy.ExactThenCompatible) &&
+            _assemblyKeysBySimpleName.TryGetValue(asmIdentity.Name, out var compatibleCandidates))
         {
-            MetadataReader? bestReader = null;
-            Version? bestVersion = null;
-
-            foreach (var candidate in looseCandidates)
+            foreach (var candidate in compatibleCandidates)
             {
-                if (asmIdentity.MatchesLoosely(candidate) &&
+                if (asmIdentity.MatchesExceptVersion(candidate) &&
                     _assemblyByIdentity.TryGetValue(candidate, out var candidateReader))
                 {
-                    if ((bestVersion == null) || (candidate.Version.CompareTo(bestVersion) > 0))
-                    {
-                        bestVersion = candidate.Version;
-                        bestReader = candidateReader;
-                    }
+                    resolvedReader = candidateReader;
+                    RecordBindingSubstitution(asmIdentity, resolvedReader, (_resolver as IAssemblyPathProvider)?.GetAssemblyPath(resolvedReader));
+                    return true;
                 }
-            }
-
-            if (bestReader != null)
-            {
-                resolvedReader = bestReader;
-                if ((uint)asmRefRow < (uint)refCache.Length)
-                {
-                    refCache[asmRefRow] = resolvedReader;
-                }
-                return true;
             }
         }
 

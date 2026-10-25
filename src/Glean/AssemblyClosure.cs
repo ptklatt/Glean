@@ -15,7 +15,9 @@ namespace Glean;
 /// resolution, or <see cref="EntryReader"/> when you want to stay on raw
 /// System.Reflection.Metadata. Missing dependencies are recorded in
 /// <see cref="SkippedDependencies"/>. Call <see cref="ThrowIfPartial"/> when a partial
-/// closure is not acceptable. Readers and contexts are invalid after disposal.
+/// closure is not acceptable. Binding requires an exact identity by default. Explicit version
+/// substitutions are recorded in <see cref="BindingSubstitutions"/>. Readers and contexts
+/// are invalid after disposal.
 /// </remarks>
 public sealed class AssemblyClosure : IDisposable
 {
@@ -35,7 +37,7 @@ public sealed class AssemblyClosure : IDisposable
         _entryReader = entryReader;
         _entryContext = AssemblyContext.Create(entryReader);
         _set = set;
-        SkippedDependencies = skipped;
+        SkippedDependencies = skipped.AsReadOnly();
     }
 
     /// <summary>
@@ -50,18 +52,7 @@ public sealed class AssemblyClosure : IDisposable
     {
         if (path == null) { throw new ArgumentNullException(nameof(path)); }
 
-        var loader = new AssemblyLoader(searchPaths);
-        try
-        {
-            var skipped = new List<AssemblyDependencyLoadFailure>();
-            var (entryReader, set) = loader.LoadWithClosure(path, skipped.Add);
-            return new AssemblyClosure(loader, entryReader, set, skipped);
-        }
-        catch
-        {
-            loader.Dispose();
-            throw;
-        }
+        return LoadCore(path, new AssemblyLoader(searchPaths), null, default);
     }
 
     /// <summary>
@@ -80,7 +71,31 @@ public sealed class AssemblyClosure : IDisposable
     {
         if (path == null) { throw new ArgumentNullException(nameof(path)); }
 
-        var loader = new AssemblyLoader(searchPaths);
+        return LoadCore(path, new AssemblyLoader(searchPaths), onSkippedDependency, default);
+    }
+
+    /// <summary>Loads an entry assembly with explicit probing and binding options.</summary>
+    /// <param name="path">Path to the entry point .dll or .exe.</param>
+    /// <param name="options">Options copied before loading begins.</param>
+    /// <param name="onSkippedDependency">Optional callback invoked for skipped dependencies.</param>
+    /// <param name="cancellationToken">Token to cancel between dependency loads.</param>
+    /// <returns>A closure that owns its loader and all opened readers.</returns>
+    public static AssemblyClosure Load(
+        string path,
+        AssemblyLoadOptions options,
+        Action<AssemblyDependencyLoadFailure>? onSkippedDependency = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        return LoadCore(path, new AssemblyLoader(options), onSkippedDependency, cancellationToken);
+    }
+
+    private static AssemblyClosure LoadCore(
+        string path,
+        AssemblyLoader loader,
+        Action<AssemblyDependencyLoadFailure>? onSkippedDependency,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var skipped = new List<AssemblyDependencyLoadFailure>();
@@ -89,7 +104,7 @@ public sealed class AssemblyClosure : IDisposable
                 skipped.Add(f);
                 onSkippedDependency?.Invoke(f);
             }
-            var (entryReader, set) = loader.LoadWithClosure(path, capture);
+            var (entryReader, set) = loader.LoadWithClosure(path, capture, cancellationToken);
             return new AssemblyClosure(loader, entryReader, set, skipped);
         }
         catch
@@ -146,6 +161,9 @@ public sealed class AssemblyClosure : IDisposable
     /// Gets the dependencies skipped during closure loading.
     /// </summary>
     public IReadOnlyList<AssemblyDependencyLoadFailure> SkippedDependencies { get; }
+
+    /// <summary>Gets the version substitutions observed during closure loading and subsequent resolution.</summary>
+    public IReadOnlyList<AssemblyBindingSubstitution> BindingSubstitutions => _set.BindingSubstitutions;
 
     /// <summary>
     /// Throws <see cref="PartialClosureException"/> when any transitive dependency was skipped.

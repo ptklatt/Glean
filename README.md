@@ -80,6 +80,14 @@ foreach (var typeReference in closure.EntryReader.EnumerateTypeReferences())
 }
 ```
 
+Assembly binding requires an exact name, version, normalized culture, and public
+key token by default. To allow version substitutions, pass `AssemblyLoadOptions`
+with `BindingPolicy = AssemblyBindingPolicy.ExactThenCompatible` (both in
+`Glean.Resolution`). Exact candidates always take priority; fallback uses search
+path order and changes only the version. Inspect `closure.BindingSubstitutions`
+for the requested identity, resolved identity, and file path. See the
+[binding recipe](docs/recipes.md#configure-assembly-binding) for an example.
+
 ## Cost Model
 
 Context enumerators, identity checks such as `NameIs` and `NamespaceIs`, and

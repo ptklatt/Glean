@@ -639,6 +639,61 @@ foreach (var skipped in closure.SkippedDependencies)
 every type or member reference resolves; check the result of each resolution
 request.
 
+## Configure Assembly Binding
+
+Closure loading and `AssemblySet` require an exact assembly name, version,
+normalized culture, and public key token by default. Filenames are probe hints;
+an identity mismatch appears in `SkippedDependencies` as `IdentityMismatch`.
+
+Choose `ExactThenCompatible` explicitly when analysis may use another version:
+
+```csharp
+using Glean;
+using Glean.Resolution;
+
+var options = new AssemblyLoadOptions
+{
+    SearchPaths = args.Skip(1).ToArray(),
+    TargetFrameworkMoniker = "net9.0",
+    BindingPolicy = AssemblyBindingPolicy.ExactThenCompatible
+};
+using var closure = AssemblyClosure.Load(args[0], options);
+closure.ThrowIfPartial();
+
+foreach (var substitution in closure.BindingSubstitutions)
+{
+    Console.WriteLine($"{substitution.RequestedIdentity} -> {substitution.ResolvedIdentity}");
+    Console.WriteLine(substitution.Path);
+}
+```
+
+Loaders copy the options and search paths when constructed. Configured search
+paths are probed in order, followed by the entry assembly's directory. A target
+framework enables NuGet layout probing under `lib/{tfm}`, `ref/{tfm}`, and
+`runtimes/*/lib/{tfm}`. Every exact candidate is considered before version
+fallback; the first compatible candidate in probe order wins, even if a later
+candidate has a higher version. Name, normalized culture, and public key token
+must still match. Neutral and empty culture are equivalent, and full public keys
+are compared by their tokens.
+
+Successful substitutions are recorded separately from skipped dependencies and
+do not make a closure partial. `BindingSubstitutions` includes distinct eager
+and subsequent lazy bindings. The same options work with `AssemblyLoader` and
+`DirectoryAssemblyResolver`. When constructing an `AssemblySet` manually, select
+its policy explicitly, for example `new AssemblySet(AssemblyBindingPolicy.ExactThenCompatible, resolver)`.
+Sets created by closure loading keep a snapshot of their effective search paths,
+including their entry assembly directory. Later `AssemblyLoader.AddSearchPath`
+calls affect direct loader resolution and future closures; existing closure sets
+keep their captured paths.
+The set validates custom resolver results against that policy. It consults the
+resolver before falling back to registered versions; registered fallback readers
+are considered in registration order. A substitution path is null for raw
+readers whose manually supplied registration or custom resolver has no file path.
+Compatible binding rechecks resolution instead of reusing warmed type, member,
+and assembly binding results, so a newly available exact candidate takes priority.
+This can cost more than exact binding. Glean does not emulate runtime binding
+redirects, load contexts, or `deps.json`.
+
 ## Resolve Type References Across Assemblies
 
 Once you have an `AssemblyClosure`, use `AssemblySet` for explicit type

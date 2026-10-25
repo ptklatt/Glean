@@ -373,7 +373,7 @@ public sealed partial class AssemblySet
         out MetadataReader targetReader,
         out EntityHandle targetHandle)
     {
-        if (_memberResolutionCache.TryGetValue(cacheKey, out var cached))
+        if ((_bindingPolicy == AssemblyBindingPolicy.Exact) && _memberResolutionCache.TryGetValue(cacheKey, out var cached))
         {
             targetReader = cached.TargetReader;
             int row = cached.RowAndKind & MemberHandleRowMask;

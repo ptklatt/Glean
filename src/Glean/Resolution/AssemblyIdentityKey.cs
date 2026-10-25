@@ -87,11 +87,26 @@ internal readonly struct AssemblyIdentityKey : IEquatable<AssemblyIdentityKey>
         return hash.ToHashCode();
     }
 
+    public bool MatchesExceptVersion(AssemblyIdentityKey other)
+    {
+        return string.Equals(Name, other.Name, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(Culture, other.Culture, StringComparison.OrdinalIgnoreCase) &&
+               (HasPublicKeyToken == other.HasPublicKeyToken) &&
+               (!HasPublicKeyToken || (PublicKeyToken == other.PublicKeyToken));
+    }
+
     public bool MatchesLoosely(AssemblyIdentityKey other)
     {
         return string.Equals(Name, other.Name, StringComparison.OrdinalIgnoreCase) &&
-               HasPublicKeyToken == other.HasPublicKeyToken &&
+               (HasPublicKeyToken == other.HasPublicKeyToken) &&
                (!HasPublicKeyToken || (PublicKeyToken == other.PublicKeyToken));
+    }
+
+    public override string ToString()
+    {
+        var culture = Culture.Length == 0 ? "neutral" : Culture;
+        var token = HasPublicKeyToken ? PublicKeyToken.ToString("x16") : "null";
+        return $"{Name}, Version={Version}, Culture={culture}, PublicKeyToken={token}";
     }
 
     private static string NormalizeCulture(StringHandle cultureHandle, MetadataReader reader)

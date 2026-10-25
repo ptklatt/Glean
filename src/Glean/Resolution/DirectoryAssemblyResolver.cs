@@ -16,7 +16,7 @@ namespace Glean.Resolution;
 /// This type is not thread safe.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Advanced)]
-public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IModuleResolver, IDisposable
+public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IModuleResolver, IAssemblyPathProvider, IDisposable
 {
     private readonly AssemblyLoader _loader;
     private bool _disposed;
@@ -42,6 +42,18 @@ public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IMod
     {
         _loader = new AssemblyLoader(targetFrameworkMoniker, searchPaths);
     }
+
+    /// <summary>Initializes a resolver with explicit probing and binding options.</summary>
+    /// <param name="options">Options copied by this resolver.</param>
+    public DirectoryAssemblyResolver(AssemblyLoadOptions options)
+    {
+        _loader = new AssemblyLoader(options);
+    }
+
+    /// <summary>Gets the assembly identity matching policy used by this resolver.</summary>
+    public AssemblyBindingPolicy BindingPolicy => _loader.BindingPolicy;
+
+    string? IAssemblyPathProvider.GetAssemblyPath(MetadataReader reader) => _loader.GetAssemblyPath(reader);
 
     /// <summary>
     /// Adds a search path to probe for assemblies.

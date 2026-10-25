@@ -425,7 +425,7 @@ public sealed class AssemblySetTests
     }
 
     [Fact]
-    public void TryResolveType_WithOnlyHigherVersionRegistered_FallsBackToLooseIdentityMatch()
+    public void TryResolveType_WithOnlyHigherVersionRegistered_ExplicitlyAllowsVersionFallback()
     {
         using var workspace = new TemporaryDirectory();
 
@@ -478,7 +478,7 @@ public sealed class AssemblySetTests
             """);
 
         using var v2Assembly = new MetadataScope(v2Path);
-        using var set = new AssemblySet();
+        using var set = new AssemblySet(AssemblyBindingPolicy.ExactThenCompatible);
         set.Add(v2Assembly.Reader);
 
         var typeReferenceHandle = ResolutionTestHelpers.FindTypeReferenceHandle(consumer.Reader, "Fixture", "VersionedType");

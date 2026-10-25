@@ -52,21 +52,21 @@ public readonly struct AssemblyDependencyLoadFailure
 /// Prefer <see cref="AssemblyScope"/> or <see cref="AssemblyClosure"/> for typical use. Use this
 /// directly for async loading, a shared loader lifetime, or incremental loading into an existing
 /// <see cref="AssemblySet"/>. This type is not thread safe.
-/// Dependency closure loading requires the reference name, version, normalized culture,
-/// and public key token to match. Mismatched candidates are skipped while probing continues.
+/// Binding requires an exact identity by default. Use <see cref="AssemblyLoadOptions"/>
+/// to explicitly allow version substitutions after all exact candidates have been probed.
 /// </remarks>
 [EditorBrowsable(EditorBrowsableState.Advanced)]
-public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver, IDisposable
+public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver, IAssemblyPathProvider, IDisposable
 {
     private readonly List<PEReader> _ownedPEReaders = new();
     private readonly Dictionary<string, MetadataReader> _loadedReaders = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<MetadataReader, string> _pathByReader = new(ReferenceEqualityComparer<MetadataReader>.Instance);
-    private readonly Dictionary<AssemblyIdentityKey, MetadataReader> _assemblyCache = new();
     private readonly Dictionary<MetadataReader, Dictionary<string, MetadataReader>> _moduleCacheByRequestingReader =
         new(ReferenceEqualityComparer<MetadataReader>.Instance);
     private readonly List<string> _searchPaths = new();
     private readonly HashSet<string> _searchPathSet = new(StringComparer.OrdinalIgnoreCase);
     private readonly string? _targetFrameworkMoniker;
+    private readonly AssemblyBindingPolicy _bindingPolicy = AssemblyBindingPolicy.Exact;
     private bool _disposed;
 
     /// <summary>
@@ -95,6 +95,34 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
             }
         }
     }
+
+    /// <summary>Initializes a loader with explicit probing and binding options.</summary>
+    /// <param name="options">Options copied by this loader.</param>
+    public AssemblyLoader(AssemblyLoadOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(options.SearchPaths);
+        if (!Enum.IsDefined(options.BindingPolicy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Unknown assembly binding policy.");
+        }
+
+        _bindingPolicy = options.BindingPolicy;
+        _targetFrameworkMoniker = string.IsNullOrWhiteSpace(options.TargetFrameworkMoniker)
+            ? null : options.TargetFrameworkMoniker;
+        foreach (var path in options.SearchPaths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new ArgumentException("Search paths cannot contain null or empty directories.", nameof(options));
+            }
+
+            AddSearchPathCore(path);
+        }
+    }
+
+    /// <summary>Gets the assembly identity matching policy used by this loader.</summary>
+    public AssemblyBindingPolicy BindingPolicy => _bindingPolicy;
 
     /// <summary>
     /// Adds a directory to probe when resolving dependencies.
@@ -205,7 +233,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
     }
 
     /// <summary>
-    /// Attempts to resolve an assembly reference using exact identity matching.
+    /// Attempts to resolve an assembly reference using the configured binding policy.
     /// </summary>
     public bool TryResolve(AssemblyReferenceHandle reference, MetadataReader requestingReader, out MetadataReader? resolvedReader)
     {
@@ -213,20 +241,16 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         if (_disposed) { throw new ObjectDisposedException(nameof(AssemblyLoader)); }
 
         var identity = AssemblyIdentityKey.FromReference(requestingReader.GetAssemblyReference(reference), requestingReader);
-        if (_assemblyCache.TryGetValue(identity, out resolvedReader))
-        {
-            return true;
-        }
-
         var result = TryLoadDependency(identity, _searchPaths, CancellationToken.None);
         resolvedReader = result.Reader;
-        if (!result.IsSuccess)
-        {
-            return false;
-        }
+        return result.IsSuccess;
+    }
 
-        _assemblyCache[identity] = resolvedReader!;
-        return true;
+    string? IAssemblyPathProvider.GetAssemblyPath(MetadataReader reader) => GetAssemblyPath(reader);
+
+    internal string? GetAssemblyPath(MetadataReader reader)
+    {
+        return _pathByReader.TryGetValue(reader, out var path) ? path : null;
     }
 
     /// <summary>
@@ -322,6 +346,8 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
                     continue;
                 }
 
+                set.RecordBindingSubstitution(requestedIdentity, loadResult.Reader!, loadResult.Path);
+
                 if (visited.Add(loadResult.Reader!))
                 {
                     set.Add(loadResult.Reader!);
@@ -391,6 +417,8 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
                     continue;
                 }
 
+                set.RecordBindingSubstitution(requestedIdentity, loadResult.Reader!, loadResult.Path);
+
                 if (visited.Add(loadResult.Reader!))
                 {
                     set.Add(loadResult.Reader!);
@@ -406,14 +434,15 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         string entryAssemblyPath,
         MetadataReader entryReader)
     {
-        var set = new AssemblySet();
+        var searchPaths = BuildEffectiveSearchPaths(entryAssemblyPath);
+        var set = new AssemblySet(_bindingPolicy, new ClosureAssemblyResolver(this, searchPaths));
         set.Add(entryReader);
 
         var queue = new Queue<MetadataReader>();
         queue.Enqueue(entryReader);
         var visited = new HashSet<MetadataReader>(ReferenceEqualityComparer<MetadataReader>.Instance) { entryReader };
 
-        return (BuildEffectiveSearchPaths(entryAssemblyPath), set, queue, visited);
+        return (searchPaths, set, queue, visited);
     }
 
     private List<string> BuildEffectiveSearchPaths(string entryAssemblyPath)
@@ -448,6 +477,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         CancellationToken cancellationToken)
     {
         DependencyLoadResult lastFailure = default;
+        DependencyLoadResult compatibleCandidate = default;
 
         foreach (var candidatePath in EnumerateCandidatePaths(requestedIdentity.Name, searchPaths))
         {
@@ -460,10 +490,17 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
                 return loadResult;
             }
 
+            CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
+
             if (loadResult.HasFailure)
             {
                 lastFailure = loadResult;
             }
+        }
+
+        if (compatibleCandidate.IsSuccess)
+        {
+            return compatibleCandidate;
         }
 
         return lastFailure.HasFailure
@@ -477,6 +514,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         CancellationToken cancellationToken)
     {
         DependencyLoadResult lastFailure = default;
+        DependencyLoadResult compatibleCandidate = default;
 
         foreach (var candidatePath in EnumerateCandidatePaths(requestedIdentity.Name, searchPaths))
         {
@@ -489,15 +527,35 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
                 return loadResult;
             }
 
+            CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
+
             if (loadResult.HasFailure)
             {
                 lastFailure = loadResult;
             }
         }
 
+        if (compatibleCandidate.IsSuccess)
+        {
+            return compatibleCandidate;
+        }
+
         return lastFailure.HasFailure
             ? lastFailure
             : DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.NotFound, null);
+    }
+
+    private void CaptureCompatibleCandidate(
+        DependencyLoadResult candidate,
+        AssemblyIdentityKey requestedIdentity,
+        ref DependencyLoadResult compatibleCandidate)
+    {
+        if ((_bindingPolicy == AssemblyBindingPolicy.ExactThenCompatible) &&
+            (!compatibleCandidate.IsSuccess) && (candidate.IsSuccess) && (candidate.Reader!.IsAssembly) &&
+            requestedIdentity.MatchesExceptVersion(AssemblyIdentityKey.FromDefinition(candidate.Reader.GetAssemblyDefinition(), candidate.Reader)))
+        {
+            compatibleCandidate = candidate;
+        }
     }
 
     private static DependencyLoadResult ValidateDependencyCandidate(
@@ -681,11 +739,33 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         _ownedPEReaders.Clear();
         _loadedReaders.Clear();
         _pathByReader.Clear();
-        _assemblyCache.Clear();
         _moduleCacheByRequestingReader.Clear();
         _searchPaths.Clear();
         _searchPathSet.Clear();
         _disposed = true;
+    }
+
+    private sealed class ClosureAssemblyResolver : IAssemblyReferenceResolver, IAssemblyPathProvider
+    {
+        private readonly AssemblyLoader _loader;
+        private readonly IReadOnlyList<string> _searchPaths;
+
+        public ClosureAssemblyResolver(AssemblyLoader loader, IReadOnlyList<string> searchPaths)
+        {
+            _loader = loader;
+            _searchPaths = searchPaths;
+        }
+
+        public bool TryResolve(AssemblyReferenceHandle reference, MetadataReader requestingReader, out MetadataReader? resolvedReader)
+        {
+            ObjectDisposedException.ThrowIf(_loader._disposed, _loader);
+            var identity = AssemblyIdentityKey.FromReference(requestingReader.GetAssemblyReference(reference), requestingReader);
+            var result = _loader.TryLoadDependency(identity, _searchPaths, CancellationToken.None);
+            resolvedReader = result.Reader;
+            return result.IsSuccess;
+        }
+
+        public string? GetAssemblyPath(MetadataReader reader) => _loader.GetAssemblyPath(reader);
     }
 
     private readonly struct DependencyLoadResult
