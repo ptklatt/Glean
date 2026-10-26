@@ -58,6 +58,17 @@ jobs:
           --no-build
           --no-restore
 
+      - name: Build benchmarks
+        run: >
+          dotnet build bench/Glean.Benchmarks/Glean.Benchmarks.csproj
+          --configuration Release
+          /p:ContinuousIntegrationBuild=true
+          /p:Version=${{ steps.version.outputs.version }}
+          /p:InformationalVersion=${{ steps.version.outputs.informational_version }}
+
+      - name: Validate benchmark workloads
+        run: dotnet run --project bench/Glean.Benchmarks -c Release --no-build -- --validate
+
       - name: Stage library artifact
         shell: bash
         run: |

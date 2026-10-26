@@ -5,6 +5,7 @@ using Xunit;
 
 using Glean.Contexts;
 using Glean.Decoding;
+using Glean.Extensions;
 using Glean.Providers;
 using Glean.Resolution;
 using Glean.Signatures;
@@ -29,6 +30,14 @@ public sealed class AllocationBehaviorTests
             {
                 Value = value;
                 return value;
+            }
+
+            public static void Defaults(bool boolean = true, char character = 'A',
+                sbyte signedByte = -1, byte unsignedByte = 2, short signedShort = -3,
+                ushort unsignedShort = 4, int signedInt = -5, uint unsignedInt = 6,
+                long signedLong = -7, ulong unsignedLong = 8, float single = 1.5f,
+                double @double = 2.5)
+            {
             }
         }
         """;
@@ -119,6 +128,39 @@ public sealed class AllocationBehaviorTests
 
         GC.KeepAlive(totalLength);
         Assert.True(allocations > 0);
+    }
+
+    [Fact]
+    public void TryGetDefaultValue_PrimitiveConstants_RepeatedDecodesStayAllocationFree()
+    {
+        using var metadata = TestUtility.BuildMetadata(LocalMetadataSource);
+        var typeHandle = metadata.FindTypeDefinitionHandle("Glean.Tests.Performance", "PerfFixture");
+        var type = TypeContext.Create(metadata.Reader, typeHandle);
+        MethodContext method = default;
+        foreach (var candidate in type.EnumerateMethods())
+        {
+            if (candidate.NameIs("Defaults"))
+            {
+                method = candidate;
+                break;
+            }
+        }
+
+        Assert.True(method.IsValid);
+        var parameters = method.Definition.GetParameters().ToArray();
+
+        AssertDefaultAllocations(metadata.Reader, parameters[0], true);
+        AssertDefaultAllocations(metadata.Reader, parameters[1], 'A');
+        AssertDefaultAllocations(metadata.Reader, parameters[2], (sbyte)-1);
+        AssertDefaultAllocations(metadata.Reader, parameters[3], (byte)2);
+        AssertDefaultAllocations(metadata.Reader, parameters[4], (short)-3);
+        AssertDefaultAllocations(metadata.Reader, parameters[5], (ushort)4);
+        AssertDefaultAllocations(metadata.Reader, parameters[6], -5);
+        AssertDefaultAllocations(metadata.Reader, parameters[7], 6U);
+        AssertDefaultAllocations(metadata.Reader, parameters[8], -7L);
+        AssertDefaultAllocations(metadata.Reader, parameters[9], 8UL);
+        AssertDefaultAllocations(metadata.Reader, parameters[10], 1.5f);
+        AssertDefaultAllocations(metadata.Reader, parameters[11], 2.5);
     }
 
     [Fact]
@@ -313,12 +355,33 @@ public sealed class AllocationBehaviorTests
         throw new InvalidOperationException("Expected a custom attribute.");
     }
 
+    private static void AssertDefaultAllocations<T>(MetadataReader reader, ParameterHandle handle, T expected)
+        where T : struct, IEquatable<T>
+    {
+        var parameter = reader.GetParameter(handle);
+        Assert.True(parameter.TryGetDefaultValue<T>(reader, out var initial));
+        Assert.Equal(expected, initial);
+
+        long allocations = MeasureAllocations(
+            () =>
+            {
+                if (!parameter.TryGetDefaultValue<T>(reader, out var value) || !value.Equals(expected))
+                {
+                    throw new InvalidOperationException("Primitive default value decode failed.");
+                }
+            },
+            20_000);
+
+        Assert.InRange(allocations, 0L, 64L);
+    }
+
     private static int GetRawTypeRowSum(MetadataReader reader)
     {
         int rowSum = 0;
         foreach (var handle in reader.TypeDefinitions)
         {
-            rowSum += MetadataTokens.GetRowNumber(handle);
+            var type = reader.GetTypeDefinition(handle);
+            rowSum += MetadataTokens.GetRowNumber(handle) + (int)type.Attributes;
         }
 
         return rowSum;
@@ -329,7 +392,7 @@ public sealed class AllocationBehaviorTests
         int rowSum = 0;
         foreach (var type in assembly.EnumerateTypes())
         {
-            rowSum += MetadataTokens.GetRowNumber(type.Handle);
+            rowSum += MetadataTokens.GetRowNumber(type.Handle) + (int)type.Attributes;
         }
 
         return rowSum;
