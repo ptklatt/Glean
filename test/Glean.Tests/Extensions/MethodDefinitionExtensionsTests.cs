@@ -5,6 +5,7 @@ using System.Reflection.PortableExecutable;
 
 using Xunit;
 
+using Glean.Contexts;
 using Glean.Extensions;
 using Glean.Providers;
 using Glean.Signatures;
@@ -56,6 +57,20 @@ public class MethodDefinitionExtensionsTests
 
         Assert.True(internalMethod.IsInternal());
         Assert.False(internalMethod.IsPublic());
+    }
+
+    [Theory]
+    [InlineData("PublicMethod", true)]
+    [InlineData("PrivateMethod", false)]
+    [InlineData("FamilyMethod", false)]
+    [InlineData("InternalMethod", false)]
+    public void MethodContextIsPublic_MethodVisibility_ReportsPublicOnly(string name, bool expected)
+    {
+        using var metadata = MethodMetadataScope.Open(typeof(MethodDefinitionExtensionsTests).Assembly);
+        var method = typeof(MethodVisibilityFixture).GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
+        var handle = MetadataTokens.MethodDefinitionHandle(method.MetadataToken);
+
+        Assert.Equal(expected, MethodContext.Create(metadata.Reader, handle).IsPublic);
     }
 
     // == Method kind checks ==================================================

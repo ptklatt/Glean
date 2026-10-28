@@ -42,17 +42,32 @@ public static class SignatureInspector
             return false;
         }
 
-        try
-        {
-            var blob = reader.GetBlobReader(signatureBlob);
-            blob.ReadByte(); // skip PROPERTY / PROPERTY+HASTHIS header byte
-            parameterCount = blob.ReadCompressedInteger();
-            return true;
-        }
-        catch (BadImageFormatException)
+        var blob = GetBlobReaderOrDefault(reader, signatureBlob);
+        if (blob.RemainingBytes == 0)
         {
             parameterCount = 0;
             return false;
+        }
+
+        blob.ReadByte(); // skip PROPERTY / PROPERTY+HASTHIS header byte
+        if (blob.TryReadCompressedInteger(out parameterCount))
+        {
+            return true;
+        }
+
+        parameterCount = 0;
+        return false;
+    }
+
+    private static BlobReader GetBlobReaderOrDefault(MetadataReader reader, BlobHandle signatureBlob)
+    {
+        try
+        {
+            return reader.GetBlobReader(signatureBlob);
+        }
+        catch (BadImageFormatException)
+        {
+            return default;
         }
     }
 

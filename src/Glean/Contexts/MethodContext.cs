@@ -107,7 +107,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsPublic
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsPublic();
+        get => (_definition.Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Public;
     }
 
     /// <summary>
