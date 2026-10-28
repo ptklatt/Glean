@@ -287,49 +287,46 @@ public sealed class MemberResolutionIndex
     {
         var type = reader.GetTypeDefinition(typeHandle);
 
-        var methodCandidatesWithShapes = new Dictionary<string, List<MethodShapeCandidate>>(StringComparer.Ordinal);
+        var methodCandidatesWithShapes = new Dictionary<string, CandidateBucket<MethodShapeCandidate>>(StringComparer.Ordinal);
         foreach (var methodHandle in type.GetMethods())
         {
             var method = reader.GetMethodDefinition(methodHandle);
             var name = reader.GetString(method.Name);
-            if (!methodCandidatesWithShapes.TryGetValue(name, out var shapedBucket))
-            {
-                shapedBucket = new List<MethodShapeCandidate>();
-                methodCandidatesWithShapes[name] = shapedBucket;
-            }
-
-            if (TryReadMethodSignatureShape(reader, method.Signature, out var shape))
-            {
-                shapedBucket.Add(new MethodShapeCandidate(methodHandle, method.Signature, true, shape));
-            }
-            else
-            {
-                shapedBucket.Add(new MethodShapeCandidate(methodHandle, method.Signature, false, default));
-            }
+            bool hasShape = TryReadMethodSignatureShape(reader, method.Signature, out var shape);
+            AddCandidate(methodCandidatesWithShapes, name, new MethodShapeCandidate(methodHandle, method.Signature, hasShape, shape));
         }
 
-        var fieldCandidates = new Dictionary<string, List<FieldDefinitionHandle>>(StringComparer.Ordinal);
+        var fieldCandidates = new Dictionary<string, CandidateBucket<FieldDefinitionHandle>>(StringComparer.Ordinal);
         foreach (var fieldHandle in type.GetFields())
         {
             var field = reader.GetFieldDefinition(fieldHandle);
             var name = reader.GetString(field.Name);
-            if (!fieldCandidates.TryGetValue(name, out var bucket))
-            {
-                bucket = new List<FieldDefinitionHandle>();
-                fieldCandidates[name] = bucket;
-            }
-
-            bucket.Add(fieldHandle);
+            AddCandidate(fieldCandidates, name, fieldHandle);
         }
 
         return new TypeMemberIndex(
-            MaterializeMethodShapeCandidates(methodCandidatesWithShapes),
-            MaterializeFieldCandidates(fieldCandidates));
+            MaterializeCandidates(methodCandidatesWithShapes),
+            MaterializeCandidates(fieldCandidates));
     }
 
-    private static Dictionary<string, FieldDefinitionHandle[]> MaterializeFieldCandidates(Dictionary<string, List<FieldDefinitionHandle>> byName)
+    private static void AddCandidate<T>(Dictionary<string, CandidateBucket<T>> byName, string name, T candidate)
     {
-        var materialized = new Dictionary<string, FieldDefinitionHandle[]>(byName.Count, StringComparer.Ordinal);
+        if (byName.TryGetValue(name, out var bucket))
+        {
+            if (bucket.Add(candidate))
+            {
+                byName[name] = bucket;
+            }
+        }
+        else
+        {
+            byName.Add(name, new CandidateBucket<T>(candidate));
+        }
+    }
+
+    private static Dictionary<string, T[]> MaterializeCandidates<T>(Dictionary<string, CandidateBucket<T>> byName)
+    {
+        var materialized = new Dictionary<string, T[]>(byName.Count, StringComparer.Ordinal);
         foreach (var pair in byName)
         {
             materialized[pair.Key] = pair.Value.ToArray();
@@ -337,14 +334,20 @@ public sealed class MemberResolutionIndex
         return materialized;
     }
 
-    private static Dictionary<string, MethodShapeCandidate[]> MaterializeMethodShapeCandidates(Dictionary<string, List<MethodShapeCandidate>> byName)
+    private struct CandidateBucket<T>(T first)
     {
-        var materialized = new Dictionary<string, MethodShapeCandidate[]>(byName.Count, StringComparer.Ordinal);
-        foreach (var pair in byName)
+        private readonly T _first = first;
+        private List<T>? _many;
+
+        public bool Add(T value)
         {
-            materialized[pair.Key] = pair.Value.ToArray();
+            bool needsWriteback = _many == null;
+            _many ??= new List<T> { _first };
+            _many.Add(value);
+            return needsWriteback;
         }
-        return materialized;
+
+        public readonly T[] ToArray() => _many != null ? _many.ToArray() : [_first];
     }
 
     private static bool TryReadMethodSignatureShape(MetadataReader reader, BlobHandle signatureHandle, out MethodSignatureShape shape)
