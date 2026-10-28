@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Benchmarks/">
+    <Project Path="bench/Glean.Benchmarks.Fixture/Glean.Benchmarks.Fixture.csproj" />
     <Project Path="bench/Glean.Benchmarks/Glean.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/Samples/">

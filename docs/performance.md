@@ -22,9 +22,10 @@ for unused tables. Passing visitors by reference preserves their state without
 boxing.
 
 `AssemblyScope` opens and owns readers, so creating a scope has setup costs.
-Warm resolution lookups reuse caches; their allocation behavior does not describe
-the first lookup or the cost of opening dependencies. Allocation checks do not
-establish execution-time parity with raw SRM.
+Successful exact-binding resolution lookups reuse caches; their allocation
+behavior does not describe the first lookup or the cost of opening dependencies.
+Repeated misses and compatible binding can allocate while retrying resolution.
+Allocation checks do not establish execution-time parity with raw SRM.
 
 ## What Intentionally Allocates
 
@@ -64,9 +65,9 @@ They currently verify:
 - all seven metadata traversal profiles stay allocation free after warmup with
   struct visitors and value state
 - long local base chains remain complete without allocating a visited collection
-- warm cached type resolution stays allocation free on repeated lookups
-- warm cached member resolution with `MemberResolutionIndex` stays allocation
-  free on repeated lookups
+- successful warm cached type resolution stays allocation free on repeated lookups
+- successful warm cached member resolution with `MemberResolutionIndex` stays
+  allocation free on repeated lookups
 - generic `Parameter.TryGetDefaultValue<T>` decoding stays allocation free for
   each supported primitive type (`bool`, `char`, signed and unsigned integers,
   `float`, and `double`) in repeated successful calls on the tested Release runtime
@@ -84,7 +85,7 @@ resolution separately from warmed traversal.
 
 [Glean.Benchmarks](../bench/Glean.Benchmarks) targets .NET 9 and uses
 [BenchmarkDotNet 0.15.8](https://www.nuget.org/packages/BenchmarkDotNet/0.15.8).
-Every pair returns the same checksum. Global setup builds deterministic metadata
+The original nine benchmark pairs return the same checksums. Their setup builds deterministic metadata
 images in memory, opens their readers, checks table counts, and validates workload
 outputs before timing. No source compilation, file I/O, reader opening, or
 fixture generation is timed. Both sides read the same metadata images.
@@ -140,22 +141,40 @@ dotnet run --project bench/Glean.Benchmarks -c Release -- --filter '*' --job Dry
 
 Dry runs include startup effects and do not establish steady state timing or
 allocation behavior. Failed builds or workloads can leave empty reports; check
-that all 18 benchmarks have measurements.
+that every selected benchmark has measurements. The original nine pairs comprise
+18 benchmarks; the spectrum workloads below add parameterized cases.
 
 Run measurements on an otherwise idle machine:
 
 ```sh
-dotnet run --project bench/Glean.Benchmarks -c Release -- --filter '*' --job Short --warmupCount 5 --iterationCount 15 --launchCount 2 --outliers DontRemove --artifacts /tmp/glean-benchmarks-results --stopOnFirstError
+dotnet run --project bench/Glean.Benchmarks -c Release -- --filter '*' --outliers DontRemove --artifacts /tmp/glean-benchmarks-results --stopOnFirstError
 ```
 
-This collects 15 measured iterations per launch across two launches, each after
-five warmup iterations, retaining outliers. `MemoryDiagnoser`, the `Median`
-column, and full JSON export are enabled. Markdown, CSV, HTML, and JSON reports
+This lets BenchmarkDotNet choose warmup and measurement counts adaptively while
+retaining outliers. Use fixed counts only after checking that the workload has
+settled. `MemoryDiagnoser`, the `Median` column, and full JSON export are enabled.
+Markdown, CSV, HTML, and JSON reports
 are written under the artifact directory's `results/` folder; full JSON includes
 individual measurements. See the
 official [command line guide](https://benchmarkdotnet.org/articles/guides/console-args.html)
 for filtering and longer jobs. CI builds the project and validates workload
 outputs.
+
+Inspect the individual iterations for a sustained change in timing. If early
+measurements are much slower than later ones, increase warmup and rerun both
+sides; keep the original samples rather than dropping them from the report.
+A cold resolver case creates fresh lookup state for each operation, but runs
+inside a warmed process. It does not measure process startup. See the official
+[job configuration guide](https://benchmarkdotnet.org/articles/configs/jobs.html)
+for adaptive warmup and accuracy settings.
+
+The original pairs use generated in-memory metadata; the broader `Fixture`
+corpus is a compiled test assembly. LINQ and CoreLib provide real assembly inputs.
+These all exercise library code, but results describe the selected inputs and
+the work inside each measured method. For a load-once application, measure file
+opening, dependency loading and the first traversal/resolution pass together.
+The file-open and closure-loading cases below measure those phases separately;
+repeated runs can still benefit from the operating system's file cache.
 
 To compare medians, divide Glean's `Median` by SRM's `Median` from the table or
 JSON statistics. BenchmarkDotNet's default `Ratio` column instead reports a ratio
@@ -166,3 +185,67 @@ Results describe this fixture on the recorded runtime and hardware. Keep fast
 traversal, warm cache hits, rich decoding, and cold resolution results separate:
 their work and allocation behavior differ. Preserve the command, revision, and
 environment information with the reports so comparisons remain reproducible.
+
+## Broader Workloads
+
+The `Spectrum` categories cover additional API families and input shapes. They
+use a compiled fixture with fields, properties, events, attributes, generics,
+constraints, inheritance, optional parameters, arrays, byrefs and a function
+pointer, plus `System.Linq` and `System.Private.CoreLib` metadata. Setup logs
+input paths and SHA-256 hashes. The compiled fixture provides nonempty cases
+for tables absent from some real assemblies, such as events in LINQ.
+
+| Categories | Work measured |
+| --- | --- |
+| `Spectrum.Metadata` | Paired SRM/context scans for fields, properties, events, parameters, generics/constraints, nested types/interfaces/method implementations, attributes, references, accessors, flags, name comparisons, materialized names and rich signatures. Rich signatures share Glean's provider. |
+| `Spectrum.Filter.Public`, `Spectrum.Filter.Private` | The same compound visibility/namespace/method-name filter with each method visibility predicate, on synthetic and real metadata. Both predicates have matching results. |
+| `Spectrum.FocusedFlags`, `Spectrum.FocusedParameters` | Dedicated flag and parameter loops, alongside the larger metadata driver. Flag cases include individual convenience getters and reading `Attributes` once for multiple masks. These isolate the calling pattern so inlining choices in the shared driver are not mistaken for an intrinsic API cost. |
+| `Spectrum.Accessors` | Dedicated property/event accessor loops, comparing convenience properties with retrieving `Definition.GetAccessors()` once and constructing contexts for its handles. All cases consume the same method rows and attributes. |
+| `Spectrum.SignatureShapes` | Property counts and generic-instance arities with one-, two- and four-byte compressed values, plus mixed nil, truncated, invalid-header and invalid-heap inputs. Failure booleans and out values are checked individually. |
+| `Spectrum.Resolution` | All member references, with successes and failures retained: cold setup, warm successful lookups, warm failures, mixed warm lookups, reader refresh and index rebuild. Both signature-cache settings are measured; false is the default. Indexed results are validated individually against unindexed resolution. |
+| `Spectrum.BindingMisses`, `Spectrum.BindingPolicy` | Missing-assembly retries with and without callbacks, exact identity matches, and version mismatch/fallback under both binding policies. Compatible binding rechecks candidates and is separate from exact-policy answer-cache hits. |
+| `Spectrum.IndexShapes` | Singleton and 64-entry method/field buckets, one or 32 names, cold construction, lazy handle-array projection and warm candidate lookup. Setup verifies exact candidate handles and order. |
+| `Spectrum.LocalHierarchy`, `Spectrum.Hierarchy` | Paired local base chains with cycle detection, plus standalone resolved base chains and transitive interfaces over already open readers. |
+| `Spectrum.Visitors` | All seven traversal profiles with a struct visitor that consumes visited row numbers. These standalone cases have no independent SRM timing baseline. |
+| `Spectrum.AttributeValues`, `Spectrum.MaterializedAttributes` | Paired raw/context attribute value decoding with the same provider, and separate materialized attribute graphs. Decode failures are counted and retained. Materialized graphs perform additional work and have no timing-parity baseline. |
+| `Spectrum.FileOpen`, `Spectrum.ClosureLoad` | Paired file open/metadata access and separate transitive dependency loading, including disposal. These include setup and I/O; repeated runs may use the operating system's file cache and are not cold-disk measurements. |
+| `Spectrum.SequencePoints`, `Spectrum.Documents` | Paired portable PDB sequence-point and document scans using the compiled fixture's PDB. |
+| `Spectrum.Constants` | Paired reads of all twelve supported primitive default-value types, missing defaults and type mismatches. The typed Glean path avoids boxing; boxed values are validated only in setup. |
+| `Spectrum.SignatureGraphs` | Dispatch over all fifteen decoded signature kinds, formatting and same-reader/cross-reader equality on prebuilt graphs. These are standalone graph operations with no SRM timing baseline. Formatting and cross-reader name comparisons allocate; type-definition equality retains reader identity. |
+| `Spectrum.FullNames` | Paired full-name materialization over the same type definitions. Both sides allocate strings and include their formatting cost. |
+| `Spectrum.TypeClassification`, `Spectrum.Constructors`, `Spectrum.AttributePresence` | Value-type/enum/delegate checks, constructor detection and present/absent attribute queries. Type classification and attribute presence compare context calls with definition calls using the same Glean SRM extension helpers, measuring wrapper overhead rather than an independent implementation. Constructor detection has a direct SRM baseline. |
+
+`--validate` also exercises these workloads and checks warmed allocation-free
+scans directly. It reports allocations for repeated resolution misses and
+compatible binding while still checking their outcomes. Intentionally allocating
+operations, failures and rich decoding are measured separately. Empty real-table
+cases remain identifiable through the logged checksums; they do not establish
+performance for populated tables.
+
+For a focused getter comparison, use `--filter '*CompoundFilterBenchmarks*'`.
+For cross-runtime measurements, add `--runtimes net9.0 net10.0` when those runtimes
+are installed. This does not change the library's target framework.
+
+By default, real corpus files come from the executing runtime. Set
+`GLEAN_BENCHMARK_RUNTIME_DIRECTORY` to a fixed runtime directory to use identical
+LINQ, CoreLib and facade inputs across runtime jobs. Set
+`GLEAN_BENCHMARK_FIXTURE_PATH` to a fixed fixture DLL for the same reason; its
+matching `.pdb` is used by the debug workloads. Preserve the logged hashes when
+comparing runs. Otherwise a runtime comparison can also change the input data.
+
+When checking several flags on the same context, reading `Attributes` once and
+applying the masks locally avoids repeated metadata access. The focused flag
+cases retain both usage patterns so that this difference stays visible.
+
+Reading several accessors has the same consideration: `Getter` and `Setter`
+each query the property's accessor table, and event accessor properties do so
+independently. When all accessors are needed together, retrieve
+`property.Definition.GetAccessors()` or `eventContext.Definition.GetAccessors()`
+once. The accessor benchmarks retain both forms and include context construction
+when consuming grouped handles.
+
+The resolution corpus registers only the source assembly, CoreLib and the
+System.Runtime facade. It intentionally retains unresolved references rather
+than silently loading more dependencies or dropping failures. The closure
+loading workload is separate. These cases broaden coverage without establishing
+exhaustive behavior or performance across all metadata, machines or platforms.

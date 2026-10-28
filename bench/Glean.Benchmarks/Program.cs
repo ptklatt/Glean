@@ -4,12 +4,14 @@ using Glean.Benchmarks;
 
 if (args.SequenceEqual(new[] { "--validate" }))
 {
+    Console.WriteLine($"Runtime={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
     using var fast = new FastBenchmarks();
     fast.Setup();
     using var rich = new RichBenchmarks();
     rich.Setup();
     using var resolution = new ResolutionBenchmarks();
     resolution.Setup();
+    SpectrumValidation.Validate();
     Console.WriteLine("All benchmark workload checks passed.");
     return 0;
 }
