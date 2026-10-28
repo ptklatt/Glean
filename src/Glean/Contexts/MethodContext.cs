@@ -116,7 +116,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsPrivate
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsPrivate();
+        get => (_definition.Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Private;
     }
 
     /// <summary>
@@ -125,7 +125,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsStatic
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsStatic();
+        get => (_definition.Attributes & MethodAttributes.Static) != 0;
     }
 
     /// <summary>
@@ -134,7 +134,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsVirtual
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsVirtual();
+        get => (_definition.Attributes & MethodAttributes.Virtual) != 0;
     }
 
     /// <summary>
@@ -143,7 +143,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsAbstract
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsAbstract();
+        get => (_definition.Attributes & MethodAttributes.Abstract) != 0;
     }
 
     /// <summary>
@@ -152,7 +152,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsFinal
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsFinal();
+        get => (_definition.Attributes & MethodAttributes.Final) != 0;
     }
 
     /// <summary>
@@ -170,7 +170,7 @@ public readonly struct MethodContext : IEquatable<MethodContext>
     public bool IsSpecialName
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsSpecialName();
+        get => (_definition.Attributes & MethodAttributes.SpecialName) != 0;
     }
 
     /// <summary>

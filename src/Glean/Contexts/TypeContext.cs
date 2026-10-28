@@ -329,13 +329,13 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     /// Checks if the type is a top level public type (not nested). Returns <c>false</c> for nested public types.
     /// </summary>
     /// <remarks>
-    /// Delegates to <see cref="Extensions.TypeDefinitionExtensions.IsPublic"/>. Both are equivalent.
+    /// Equivalent to <see cref="Extensions.TypeDefinitionExtensions.IsPublic"/>.
     /// Use <see cref="IsNestedPublic"/> for nested types.
     /// </remarks>
     public bool IsPublic
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsPublic();
+        get => (_definition.Attributes & TypeAttributes.VisibilityMask) == TypeAttributes.Public;
     }
 
     /// <summary>
@@ -344,7 +344,7 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public bool IsNestedPublic
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsNestedPublic();
+        get => (_definition.Attributes & TypeAttributes.VisibilityMask) == TypeAttributes.NestedPublic;
     }
 
     /// <summary>
@@ -353,7 +353,11 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public bool IsNested
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsNested();
+        get
+        {
+            var visibility = _definition.Attributes & TypeAttributes.VisibilityMask;
+            return (visibility >= TypeAttributes.NestedPublic) && (visibility <= TypeAttributes.NestedFamORAssem);
+        }
     }
 
     /// <summary>
@@ -362,7 +366,7 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public bool IsInterface
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsInterface();
+        get => (_definition.Attributes & TypeAttributes.Interface) != 0;
     }
 
     /// <summary>
@@ -371,7 +375,7 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public bool IsAbstract
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsAbstract();
+        get => (_definition.Attributes & TypeAttributes.Abstract) != 0;
     }
 
     /// <summary>
@@ -380,7 +384,7 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public bool IsSealed
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsSealed();
+        get => (_definition.Attributes & TypeAttributes.Sealed) != 0;
     }
 
     /// <summary>
@@ -389,7 +393,7 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     public bool IsStaticClass
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _definition.IsStaticClass();
+        get => (_definition.Attributes & (TypeAttributes.Abstract | TypeAttributes.Sealed)) == (TypeAttributes.Abstract | TypeAttributes.Sealed);
     }
 
     /// <summary>
