@@ -79,6 +79,12 @@ public static class ParameterExtensions
             return false;
         }
 
+        return TryReadDefaultValue(parameter, reader, out value);
+    }
+
+    private static bool TryReadDefaultValue<T>(Parameter parameter, MetadataReader reader, out T value)
+        where T : struct
+    {
         var constantHandle = parameter.GetDefaultValue();
         if (constantHandle.IsNil)
         {
@@ -104,13 +110,14 @@ public static class ParameterExtensions
                        typeof(T) == typeof(double) ? ConstantTypeCode.Double :
                        (ConstantTypeCode)255;
 
-        if (constant.TypeCode != typeCode)
+        var actualTypeCode = constant.TypeCode;
+        if (actualTypeCode != typeCode)
         {
             value = default;
             return false;
         }
 
-        value = constant.TypeCode switch
+        value = actualTypeCode switch
         {
             ConstantTypeCode.Boolean => (T)(object)blobReader.ReadBoolean(),
             ConstantTypeCode.Char    => (T)(object)blobReader.ReadChar(),
