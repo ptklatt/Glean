@@ -23,9 +23,10 @@ public sealed partial class AssemblySet
         out ResolutionFailureReason reason,
         CancellationToken ct)
     {
-        var owner = new MemberSearchType(TypeContext.Create(ownerReader, ownerHandle), default, null);
+        var ownerType = TypeContext.Create(ownerReader, ownerHandle);
         int registrationCount = _assemblyByIdentity.Count;
-        bool resolved = TryResolveDeclaredMember(reader, referenceHandle, reference, owner, index,
+        bool resolved = TryResolveDeclaredMember(reader, referenceHandle, reference, ownerType,
+            ImmutableArray<TypeSignature>.Empty, index,
             out targetReader, out targetHandle, out reason);
         ct.ThrowIfCancellationRequested();
         if (resolved)
@@ -45,6 +46,7 @@ public sealed partial class AssemblySet
             return false;
         }
 
+        var owner = new MemberSearchType(ownerType, default, null);
         bool searchInterfaces = owner.Type.IsInterface;
         var level = new List<MemberSearchType> { owner };
         var visited = new HashSet<MemberSearchType> { owner };
@@ -93,7 +95,7 @@ public sealed partial class AssemblySet
             foreach (var type in next)
             {
                 ct.ThrowIfCancellationRequested();
-                if (TryResolveDeclaredMember(reader, referenceHandle, reference, type, index,
+                if (TryResolveDeclaredMember(reader, referenceHandle, reference, type.Type, type.Arguments, index,
                     out var candidateReader, out var candidateHandle, out reason))
                 {
                     if ((matchReader != null) &&
@@ -154,29 +156,30 @@ public sealed partial class AssemblySet
         MetadataReader reader,
         MemberReferenceHandle referenceHandle,
         MemberReference reference,
-        MemberSearchType type,
+        TypeContext type,
+        ImmutableArray<TypeSignature> arguments,
         MemberResolutionIndex? index,
         out MetadataReader targetReader,
         out EntityHandle targetHandle,
         out ResolutionFailureReason reason)
     {
-        var context = new SignatureDecodeContext(type.Arguments);
+        var context = new SignatureDecodeContext(arguments);
         switch (reference.GetKind())
         {
             case MemberReferenceKind.Method:
                 return index != null
                     ? TryResolveIndexedMethodMember(reader, referenceHandle, reference,
-                        type.Type.Reader, type.Type.Handle, index,
+                        type.Reader, type.Handle, index,
                         out targetReader, out targetHandle, out reason, context)
-                    : TryResolveScannedMethodMember(reader, reference, type.Type.Reader, type.Type.Handle,
+                    : TryResolveScannedMethodMember(reader, reference, type.Reader, type.Handle,
                         out targetReader, out targetHandle, out reason, context);
 
             case MemberReferenceKind.Field:
                 return index != null
                     ? TryResolveIndexedFieldMember(reader, referenceHandle, reference,
-                        type.Type.Reader, type.Type.Handle, index,
+                        type.Reader, type.Handle, index,
                         out targetReader, out targetHandle, out reason, context)
-                    : TryResolveScannedFieldMember(reader, reference, type.Type.Reader, type.Type.Handle,
+                    : TryResolveScannedFieldMember(reader, reference, type.Reader, type.Handle,
                         out targetReader, out targetHandle, out reason, context);
 
             default:
