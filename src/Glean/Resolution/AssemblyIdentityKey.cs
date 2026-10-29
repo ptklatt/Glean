@@ -44,7 +44,11 @@ internal readonly struct AssemblyIdentityKey : IEquatable<AssemblyIdentityKey>
 
     public static AssemblyIdentityKey FromDefinition(AssemblyDefinition definition, MetadataReader reader)
     {
-        var name = reader.GetString(definition.Name);
+        return FromDefinition(definition, reader, reader.GetString(definition.Name));
+    }
+
+    public static AssemblyIdentityKey FromDefinition(AssemblyDefinition definition, MetadataReader reader, string name)
+    {
         var version = definition.Version ?? EmptyVersion;
         var culture = NormalizeCulture(definition.Culture, reader);
 

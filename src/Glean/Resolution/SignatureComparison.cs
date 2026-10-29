@@ -126,8 +126,8 @@ internal static class SignatureComparison
             return true;
         }
 
-        if (TryGetNamedTypeIdentity(left, out var leftIdentity) &&
-            TryGetNamedTypeIdentity(right, out var rightIdentity))
+        if (TryGetNamedTypeIdentity(left, out var leftIdentity, assemblySet) &&
+            TryGetNamedTypeIdentity(right, out var rightIdentity, assemblySet))
         {
             if (leftIdentity.Matches(rightIdentity))
             {
@@ -139,8 +139,8 @@ internal static class SignatureComparison
                 TryResolveNamedType(right, assemblySet, out var rightType))
             {
                 return leftType.Equals(rightType) ||
-                    CreateTypeDefinitionIdentity(new TypeDefinitionSignature(leftType.Reader, leftType.Handle))
-                        .Matches(CreateTypeDefinitionIdentity(new TypeDefinitionSignature(rightType.Reader, rightType.Handle)));
+                    CreateTypeDefinitionIdentity(new TypeDefinitionSignature(leftType.Reader, leftType.Handle), assemblySet)
+                        .Matches(CreateTypeDefinitionIdentity(new TypeDefinitionSignature(rightType.Reader, rightType.Handle), assemblySet));
             }
 
             return false;
@@ -213,19 +213,19 @@ internal static class SignatureComparison
         return false;
     }
 
-    internal static bool TryGetNamedTypeIdentity(TypeSignature signature, out NamedTypeIdentity identity)
+    internal static bool TryGetNamedTypeIdentity(TypeSignature signature, out NamedTypeIdentity identity, AssemblySet? assemblySet = null)
     {
         switch (signature)
         {
             case TypeDefinitionSignature def:
                 {
-                    identity = CreateTypeDefinitionIdentity(def);
+                    identity = CreateTypeDefinitionIdentity(def, assemblySet);
                     return true;
                 }
 
             case TypeReferenceSignature typeRef:
                 {
-                    return TryCreateTypeReferenceIdentity(typeRef, out identity);
+                    return TryCreateTypeReferenceIdentity(typeRef, out identity, assemblySet);
                 }
 
             default:
@@ -234,7 +234,7 @@ internal static class SignatureComparison
         }
     }
 
-    private static NamedTypeIdentity CreateTypeDefinitionIdentity(TypeDefinitionSignature signature)
+    private static NamedTypeIdentity CreateTypeDefinitionIdentity(TypeDefinitionSignature signature, AssemblySet? assemblySet = null)
     {
         var reader = signature.Reader;
         var handle = signature.Handle;
@@ -245,7 +245,7 @@ internal static class SignatureComparison
             {
                 string name = reader.GetString(definition.Name);
                 string topLevelNamespace = reader.GetString(definition.Namespace);
-                return new NamedTypeIdentity(topLevelNamespace, name, CreateDefinitionScope(reader));
+                return new NamedTypeIdentity(topLevelNamespace, name, CreateDefinitionScope(reader, assemblySet));
             }
         }
 
@@ -267,12 +267,13 @@ internal static class SignatureComparison
         }
 
         names.Reverse();
-        return new NamedTypeIdentity(nameSpace, names.ToArray(), CreateDefinitionScope(reader));
+        return new NamedTypeIdentity(nameSpace, names.ToArray(), CreateDefinitionScope(reader, assemblySet));
     }
 
     private static bool TryCreateTypeReferenceIdentity(
         TypeReferenceSignature signature,
-        out NamedTypeIdentity identity)
+        out NamedTypeIdentity identity,
+        AssemblySet? assemblySet)
     {
         var reader = signature.Reader;
         var typeReference = reader.GetTypeReference(signature.Handle);
@@ -280,7 +281,7 @@ internal static class SignatureComparison
         {
             string name = reader.GetString(typeReference.Name);
             string topLevelNamespace = reader.GetString(typeReference.Namespace);
-            var topLevelScope = CreateReferenceScope(reader, typeReference.ResolutionScope);
+            var topLevelScope = CreateReferenceScope(reader, typeReference.ResolutionScope, assemblySet);
             if (topLevelScope.Kind == NamedTypeScopeKind.Unknown)
             {
                 identity = default;
@@ -292,7 +293,7 @@ internal static class SignatureComparison
         }
 
         var names = new List<string>();
-        if (!TryPopulateTypeReferenceIdentity(signature.Reader, signature.Handle, names, out var nameSpace, out var scope))
+        if (!TryPopulateTypeReferenceIdentity(signature.Reader, signature.Handle, names, out var nameSpace, out var scope, assemblySet))
         {
             identity = default;
             return false;
@@ -307,7 +308,8 @@ internal static class SignatureComparison
         TypeReferenceHandle handle,
         List<string> names,
         out string nameSpace,
-        out NamedTypeScopeIdentity scope)
+        out NamedTypeScopeIdentity scope,
+        AssemblySet? assemblySet)
     {
         var typeReference = reader.GetTypeReference(handle);
         if (typeReference.ResolutionScope.Kind == HandleKind.TypeReference)
@@ -317,7 +319,8 @@ internal static class SignatureComparison
                     (TypeReferenceHandle)typeReference.ResolutionScope,
                     names,
                     out nameSpace,
-                    out scope))
+                    out scope,
+                    assemblySet))
             {
                 return false;
             }
@@ -328,23 +331,32 @@ internal static class SignatureComparison
 
         names.Add(reader.GetString(typeReference.Name));
         nameSpace = reader.GetString(typeReference.Namespace);
-        scope = CreateReferenceScope(reader, typeReference.ResolutionScope);
+        scope = CreateReferenceScope(reader, typeReference.ResolutionScope, assemblySet);
         return scope.Kind != NamedTypeScopeKind.Unknown;
     }
 
-    private static NamedTypeScopeIdentity CreateDefinitionScope(MetadataReader reader)
+    private static NamedTypeScopeIdentity CreateDefinitionScope(MetadataReader reader, AssemblySet? assemblySet = null)
     {
         if (reader.IsAssembly)
         {
+            var definition = reader.GetAssemblyDefinition();
+            string name = reader.GetString(definition.Name);
+            if ((assemblySet != null) &&
+                ReferenceEquals(reader.UTF8Decoder, MetadataStringDecoder.DefaultUTF8) &&
+                assemblySet.TryGetRegisteredAssemblyIdentity(reader, name, out var identity))
+            {
+                return NamedTypeScopeIdentity.CreateAssembly(reader, identity);
+            }
+
             return NamedTypeScopeIdentity.CreateAssembly(
                 reader,
-                AssemblyIdentityKey.FromDefinition(reader.GetAssemblyDefinition(), reader));
+                AssemblyIdentityKey.FromDefinition(definition, reader, name));
         }
 
         return NamedTypeScopeIdentity.CreateCurrentModule(reader, GetModuleName(reader));
     }
 
-    private static NamedTypeScopeIdentity CreateReferenceScope(MetadataReader reader, EntityHandle resolutionScope)
+    private static NamedTypeScopeIdentity CreateReferenceScope(MetadataReader reader, EntityHandle resolutionScope, AssemblySet? assemblySet)
     {
         switch (resolutionScope.Kind)
         {
@@ -357,7 +369,7 @@ internal static class SignatureComparison
                 }
 
             case HandleKind.ModuleDefinition:
-                return CreateDefinitionScope(reader);
+                return CreateDefinitionScope(reader, assemblySet);
 
             case HandleKind.ModuleReference:
                 {

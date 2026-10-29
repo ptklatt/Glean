@@ -125,6 +125,22 @@ public sealed partial class AssemblySet : IDisposable
     /// <summary>Gets the distinct version substitutions observed during eager or lazy resolution.</summary>
     public IReadOnlyList<AssemblyBindingSubstitution> BindingSubstitutions { get; }
 
+    internal bool TryGetRegisteredAssemblyIdentity(MetadataReader reader, string name, out AssemblyIdentityKey identity)
+    {
+        if (_assemblyKeysBySimpleName.TryGetValue(name, out var identities) && (identities.Count == 1))
+        {
+            var candidate = identities[0];
+            if (_assemblyByIdentity.TryGetValue(candidate, out var registered) && ReferenceEquals(reader, registered))
+            {
+                identity = candidate;
+                return true;
+            }
+        }
+
+        identity = default;
+        return false;
+    }
+
     internal void RecordBindingSubstitution(AssemblyIdentityKey requested, MetadataReader resolvedReader, string? path)
     {
         var resolved = AssemblyIdentityKey.FromDefinition(resolvedReader.GetAssemblyDefinition(), resolvedReader);
