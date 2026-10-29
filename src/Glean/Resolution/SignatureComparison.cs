@@ -238,6 +238,17 @@ internal static class SignatureComparison
     {
         var reader = signature.Reader;
         var handle = signature.Handle;
+        if (!handle.IsNil)
+        {
+            var definition = reader.GetTypeDefinition(handle);
+            if (!definition.IsNested)
+            {
+                string name = reader.GetString(definition.Name);
+                string topLevelNamespace = reader.GetString(definition.Namespace);
+                return new NamedTypeIdentity(topLevelNamespace, name, CreateDefinitionScope(reader));
+            }
+        }
+
         var names = new List<string>();
         string nameSpace = string.Empty;
 
@@ -263,6 +274,23 @@ internal static class SignatureComparison
         TypeReferenceSignature signature,
         out NamedTypeIdentity identity)
     {
+        var reader = signature.Reader;
+        var typeReference = reader.GetTypeReference(signature.Handle);
+        if (typeReference.ResolutionScope.Kind != HandleKind.TypeReference)
+        {
+            string name = reader.GetString(typeReference.Name);
+            string topLevelNamespace = reader.GetString(typeReference.Namespace);
+            var topLevelScope = CreateReferenceScope(reader, typeReference.ResolutionScope);
+            if (topLevelScope.Kind == NamedTypeScopeKind.Unknown)
+            {
+                identity = default;
+                return false;
+            }
+
+            identity = new NamedTypeIdentity(topLevelNamespace, name, topLevelScope);
+            return true;
+        }
+
         var names = new List<string>();
         if (!TryPopulateTypeReferenceIdentity(signature.Reader, signature.Handle, names, out var nameSpace, out var scope))
         {
@@ -464,13 +492,23 @@ internal static class SignatureComparison
 internal readonly struct NamedTypeIdentity
 {
     public readonly string Namespace;
-    public readonly string[] NamePath;
+    private readonly string? _singleName;
+    private readonly string[]? _namePath;
     public readonly NamedTypeScopeIdentity Scope;
 
     public NamedTypeIdentity(string nameSpace, string[] namePath, NamedTypeScopeIdentity scope)
     {
         Namespace = nameSpace;
-        NamePath = namePath;
+        _singleName = null;
+        _namePath = namePath;
+        Scope = scope;
+    }
+
+    public NamedTypeIdentity(string nameSpace, string name, NamedTypeScopeIdentity scope)
+    {
+        Namespace = nameSpace;
+        _singleName = name;
+        _namePath = null;
         Scope = scope;
     }
 
@@ -481,14 +519,23 @@ internal readonly struct NamedTypeIdentity
             return false;
         }
 
-        if (NamePath.Length != other.NamePath.Length)
+        if ((_singleName != null) && (other._singleName != null))
+        {
+            return string.Equals(_singleName, other._singleName, StringComparison.Ordinal) && Scope.Matches(other.Scope);
+        }
+
+        int length = _singleName != null ? 1 : _namePath!.Length;
+        int otherLength = other._singleName != null ? 1 : other._namePath!.Length;
+        if (length != otherLength)
         {
             return false;
         }
 
-        for (int i = 0; i < NamePath.Length; i++)
+        for (int i = 0; i < length; i++)
         {
-            if (!string.Equals(NamePath[i], other.NamePath[i], StringComparison.Ordinal))
+            string name = _singleName ?? _namePath![i];
+            string otherName = other._singleName ?? other._namePath![i];
+            if (!string.Equals(name, otherName, StringComparison.Ordinal))
             {
                 return false;
             }
