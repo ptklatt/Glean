@@ -15,12 +15,18 @@ internal static class ResolutionCore
     internal static Dictionary<(string, string), TypeDefinitionHandle> BuildTypeLookup(MetadataReader reader)
     {
         var lookup = new Dictionary<(string, string), TypeDefinitionHandle>();
+        bool canReuseNamespace = ReferenceEquals(reader.UTF8Decoder, MetadataStringDecoder.DefaultUTF8);
+        StringHandle previousNamespaceHandle = default;
+        string previousNamespace = string.Empty;
         foreach (var typeDefHandle in reader.TypeDefinitions)
         {
             var typeDef = reader.GetTypeDefinition(typeDefHandle);
             if (typeDef.IsNested) { continue; }
             
-            var ns = reader.GetString(typeDef.Namespace);
+            var ns = (typeDef.Namespace == previousNamespaceHandle) && canReuseNamespace
+                ? previousNamespace : reader.GetString(typeDef.Namespace);
+            previousNamespaceHandle = typeDef.Namespace;
+            previousNamespace = ns;
             var name = reader.GetString(typeDef.Name);
             lookup[(ns, name)] = typeDefHandle;
         }
@@ -35,10 +41,16 @@ internal static class ResolutionCore
     internal static Dictionary<(string, string), ExportedTypeHandle> BuildForwarderLookup(MetadataReader reader)
     {
         var lookup = new Dictionary<(string, string), ExportedTypeHandle>();
+        bool canReuseNamespace = ReferenceEquals(reader.UTF8Decoder, MetadataStringDecoder.DefaultUTF8);
+        StringHandle previousNamespaceHandle = default;
+        string previousNamespace = string.Empty;
         foreach (var exportedTypeHandle in reader.ExportedTypes)
         {
             var exportedType = reader.GetExportedType(exportedTypeHandle);
-            var ns = reader.GetString(exportedType.Namespace);
+            var ns = (exportedType.Namespace == previousNamespaceHandle) && canReuseNamespace
+                ? previousNamespace : reader.GetString(exportedType.Namespace);
+            previousNamespaceHandle = exportedType.Namespace;
+            previousNamespace = ns;
             var name = reader.GetString(exportedType.Name);
             lookup[(ns, name)] = exportedTypeHandle;
         }
