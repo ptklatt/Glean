@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Runtime.InteropServices;
 
 using Glean.Providers;
 using Glean.Signatures;
@@ -311,16 +312,14 @@ public sealed class MemberResolutionIndex
 
     private static void AddCandidate<T>(Dictionary<string, CandidateBucket<T>> byName, string name, T candidate)
     {
-        if (byName.TryGetValue(name, out var bucket))
+        ref var bucket = ref CollectionsMarshal.GetValueRefOrAddDefault(byName, name, out bool exists);
+        if (exists)
         {
-            if (bucket.Add(candidate))
-            {
-                byName[name] = bucket;
-            }
+            bucket.Add(candidate);
         }
         else
         {
-            byName.Add(name, new CandidateBucket<T>(candidate));
+            bucket = new CandidateBucket<T>(candidate);
         }
     }
 
@@ -339,12 +338,10 @@ public sealed class MemberResolutionIndex
         private readonly T _first = first;
         private List<T>? _many;
 
-        public bool Add(T value)
+        public void Add(T value)
         {
-            bool needsWriteback = _many == null;
             _many ??= new List<T> { _first };
             _many.Add(value);
-            return needsWriteback;
         }
 
         public readonly T[] ToArray() => _many != null ? _many.ToArray() : [_first];
