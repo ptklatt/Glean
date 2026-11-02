@@ -133,6 +133,18 @@ Validate all workload outputs without collecting timing results:
 dotnet run --project bench/Glean.Benchmarks -c Release -- --validate
 ```
 
+Validation reports the current process runtime and the loaded SRM assembly's
+informational version, identity, path, and SHA-256 hash. Record these alongside
+measurement results: a fixed NuGet package reference does not guarantee the same
+loaded assembly across runtimes. A newer runtime can use its shared-framework
+copy of SRM, as described in the
+[.NET package compatibility rules](https://learn.microsoft.com/en-us/dotnet/standard/library-guidance/nuget-package-compatibility-rules).
+
+This output describes the validation process. For measurements that launch
+multiple runtimes, validate under each selected runtime; the parent process's
+dependency information does not describe every benchmark child. Comparisons
+within one runtime and comparisons between runtimes answer different questions.
+
 Run a smoke check to verify generated benchmark processes and exporters:
 
 ```sh

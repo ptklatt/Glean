@@ -4,7 +4,7 @@ using Glean.Benchmarks;
 
 if (args.SequenceEqual(new[] { "--validate" }))
 {
-    Console.WriteLine($"Runtime={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+    BenchmarkEnvironment.WriteToConsole();
     using var fast = new FastBenchmarks();
     fast.Setup();
     using var rich = new RichBenchmarks();
