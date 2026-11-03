@@ -81,7 +81,7 @@ public static partial class MethodDefinitionExtensions
     /// <returns>The IL bytes as a span, or empty if the method has no body.</returns>
     /// <remarks>
     /// The returned span is valid as long as the <paramref name="peReader"/> is alive.
-    /// Prefer this over <see cref="GetILBytes"/> on hot paths to avoid byte[] allocation.
+    /// Prefer this over <see cref="DecodeILBytes"/> on hot paths to avoid byte[] allocation.
     /// Parses the IL method body header directly from PE mapped memory without allocating a MethodBodyBlock.
     /// </remarks>
     public static unsafe ReadOnlySpan<byte> GetILSpan(this MethodDefinition method, PEReader peReader)

@@ -8,6 +8,32 @@ The goal is not to hide `System.Reflection.Metadata`. The goal is to remove the 
 most users end up writing anyway while keeping the raw reader, handles, and
 metadata structs available whenever you want them.
 
+## Build and Package
+
+Glean ships .NET 8 and .NET 10 package assets and references System.Reflection.Metadata 10.0.5.
+.NET 9 applications use the .NET 8 Glean asset. Tests and package consumers cover
+.NET 8, .NET 9 and .NET 10. Install the SDK pinned in `global.json`, plus .NET 8
+and .NET 9 runtimes to run all test targets.
+
+```sh
+dotnet build Glean.slnx -c Release
+dotnet test test/Glean.Tests/Glean.Tests.csproj -c Release --no-build
+dotnet pack src/Glean/Glean.csproj -c Release -o artifacts/packages
+```
+
+Local packages default to `0.1.0-alpha.1`. The package includes XML documentation,
+the MIT license and this README; the symbol package includes portable PDBs with
+SourceLink and embedded library sources. To inspect the packages and compile fresh
+package consumers on all three runtimes, run from the repository root:
+
+```sh
+dotnet run --project eng/VerifyPackage -c Release -- artifacts/packages 0.1.0-alpha.1 <git-revision>
+```
+
+Use the full commit hash from `git rev-parse HEAD` for `<git-revision>`. CI runs the
+same checks on Ubuntu and Windows. Tag builds upload package artifacts; publishing
+requires a separate protected release job and is not performed by this workflow.
+
 ## Choose a Lane
 
 Glean is easiest to use if you pick the lane that matches the cost model you
@@ -20,7 +46,8 @@ want:
   `ITypeSignatureVisitor<TState>`, `CustomAttributeDecoder`, and formatting
   helpers that materialize richer object graphs.
 - Cross assembly resolution: `AssemblyClosure` and `AssemblySet` for resolving
-  type and member references across a dependency closure.
+  type and member references across a dependency closure. This API is preview
+  while the library is in alpha.
 
 Raw `System.Reflection.Metadata` is always still here:
 
@@ -86,7 +113,7 @@ with `BindingPolicy = AssemblyBindingPolicy.ExactThenCompatible` (both in
 `Glean.Resolution`). Exact candidates always take priority; fallback uses search
 path order and changes only the version. Inspect `closure.BindingSubstitutions`
 for the requested identity, resolved identity, and file path. See the
-[binding recipe](docs/recipes.md#configure-assembly-binding) for an example.
+[binding recipe](https://github.com/ptklatt/glean/blob/master/docs/recipes.md#configure-assembly-binding) for an example.
 
 ## Cost Model
 
@@ -105,17 +132,17 @@ If you are on a hot path, stay on contexts, enumerators, handles, and the raw
 reader. If you need a friendlier shape for signatures, attributes, or
 resolution, move up a tier only where it pays for itself.
 
-See [performance notes](docs/performance.md) for allocation boundaries and the
+See [performance notes](https://github.com/ptklatt/glean/blob/master/docs/performance.md) for allocation boundaries and the
 scope of the regression tests.
 
 ## Samples
 
-Runnable samples live under [`samples`](samples/README.md):
+Runnable samples live under [`samples`](https://github.com/ptklatt/glean/blob/master/samples/README.md):
 
-- [FastTraversalSample](samples/FastTraversalSample/Program.cs)
-- [RichDecodingSample](samples/RichDecodingSample/Program.cs)
-- [ResolutionSample](samples/ResolutionSample/Program.cs)
-- [InspectorSample](samples/InspectorSample/Program.cs)
+- [FastTraversalSample](https://github.com/ptklatt/glean/blob/master/samples/FastTraversalSample/Program.cs)
+- [RichDecodingSample](https://github.com/ptklatt/glean/blob/master/samples/RichDecodingSample/Program.cs)
+- [ResolutionSample](https://github.com/ptklatt/glean/blob/master/samples/ResolutionSample/Program.cs)
+- [InspectorSample](https://github.com/ptklatt/glean/blob/master/samples/InspectorSample/Program.cs)
 
 The first three are starter samples. `InspectorSample` is a larger demo tool
 that shows how the tiers mix in one flow. All of them are path driven and work
@@ -123,5 +150,5 @@ against real assemblies rather than test fixtures.
 
 ## Recipes
 
-[Usage recipes](docs/recipes.md) cover module metadata, visitors, portable PDBs,
+[Usage recipes](https://github.com/ptklatt/glean/blob/master/docs/recipes.md) cover module metadata, visitors, portable PDBs,
 signature decoding, and cross assembly resolution.

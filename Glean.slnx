@@ -3,6 +3,9 @@
     <Project Path="bench/Glean.Benchmarks.Fixture/Glean.Benchmarks.Fixture.csproj" />
     <Project Path="bench/Glean.Benchmarks/Glean.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/Engineering/">
+    <Project Path="eng/VerifyPackage/VerifyPackage.csproj" />
+  </Folder>
   <Folder Name="/Samples/">
     <Project Path="samples/CustomIrSample/CustomIrSample.csproj" />
     <Project Path="samples/FastTraversalSample/FastTraversalSample.csproj" />

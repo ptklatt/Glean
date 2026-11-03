@@ -76,6 +76,12 @@ The tests exclude fixture creation, reader setup, delegate construction, and
 cache warmup from the measured interval. They use thread-local allocation counts;
 some checks allow a small fixed tolerance across thousands of operations.
 
+Custom attribute parent reads can allocate during early calls on .NET 8, in both
+raw SRM and Glean. On the tested .NET 8 runtimes, these allocations disappear
+after JIT warmup. Benchmark workload validation adds 1.5 seconds of warmup for
+attribute scans before enforcing zero steady state allocations. This check does
+not describe cold-load allocations; measure first-pass workloads separately.
+
 These are allocation regression tests, not timing benchmarks. Compare equivalent
 work when measuring time: enumerating raw handles does less work than creating
 contexts that also read their definitions. Report rich decoding and cold
@@ -83,7 +89,7 @@ resolution separately from warmed traversal.
 
 ## Equivalent SRM Benchmarks
 
-[Glean.Benchmarks](../bench/Glean.Benchmarks) targets .NET 9 and uses
+[Glean.Benchmarks](../bench/Glean.Benchmarks) targets .NET 8, .NET 9 and .NET 10 and uses
 [BenchmarkDotNet 0.15.8](https://www.nuget.org/packages/BenchmarkDotNet/0.15.8).
 The original nine benchmark pairs return the same checksums. Their setup builds deterministic metadata
 images in memory, opens their readers, checks table counts, and validates workload
@@ -130,7 +136,7 @@ semantic signature fallback.
 Validate all workload outputs without collecting timing results:
 
 ```sh
-dotnet run --project bench/Glean.Benchmarks -c Release -- --validate
+dotnet run --project bench/Glean.Benchmarks -c Release -f net10.0 -- --validate
 ```
 
 Validation reports the current process runtime and the loaded SRM assembly's
@@ -148,7 +154,7 @@ within one runtime and comparisons between runtimes answer different questions.
 Run a smoke check to verify generated benchmark processes and exporters:
 
 ```sh
-dotnet run --project bench/Glean.Benchmarks -c Release -- --filter '*' --job Dry --artifacts /tmp/glean-benchmarks-smoke --stopOnFirstError
+dotnet run --project bench/Glean.Benchmarks -c Release -f net10.0 -- --filter '*' --job Dry --artifacts /tmp/glean-benchmarks-smoke --stopOnFirstError
 ```
 
 Dry runs include startup effects and do not establish steady state timing or
@@ -159,7 +165,7 @@ that every selected benchmark has measurements. The original nine pairs comprise
 Run measurements on an otherwise idle machine:
 
 ```sh
-dotnet run --project bench/Glean.Benchmarks -c Release -- --filter '*' --outliers DontRemove --artifacts /tmp/glean-benchmarks-results --stopOnFirstError
+dotnet run --project bench/Glean.Benchmarks -c Release -f net10.0 -- --filter '*' --outliers DontRemove --artifacts /tmp/glean-benchmarks-results --stopOnFirstError
 ```
 
 This lets BenchmarkDotNet choose warmup and measurement counts adaptively while
@@ -235,7 +241,7 @@ cases remain identifiable through the logged checksums; they do not establish
 performance for populated tables.
 
 For a focused getter comparison, use `--filter '*CompoundFilterBenchmarks*'`.
-For cross-runtime measurements, add `--runtimes net9.0 net10.0` when those runtimes
+For cross-runtime measurements, add `--runtimes net8.0 net9.0 net10.0` when those runtimes
 are installed. This does not change the library's target framework.
 
 By default, real corpus files come from the executing runtime. Set

@@ -34,7 +34,8 @@ internal static class SpectrumValidation
                 }
                 if ((workload != MetadataWorkload.Names) && (workload != MetadataWorkload.RichSignatures))
                 {
-                    RequireAllocationFree(benchmark.Glean, $"{corpus}/{workload}");
+                    RequireAllocationFree(benchmark.Glean, $"{corpus}/{workload}",
+                        warmupMilliseconds: workload == MetadataWorkload.Attributes ? 1500 : 0);
                 }
                 checks++;
             }
@@ -152,9 +153,9 @@ internal static class SpectrumValidation
         Console.WriteLine($"Validated {checks} spectrum workload configurations, fast allocation contracts and allocating resolution paths.");
     }
 
-    private static void RequireAllocationFree(Func<long> operation, string name)
+    private static void RequireAllocationFree(Func<long> operation, string name, int warmupMilliseconds = 0)
     {
-        long allocated = MeasureAllocations(operation, name);
+        long allocated = MeasureAllocations(operation, name, warmupMilliseconds);
         MetadataFixture.Require(allocated == 0, $"{name} allocated {allocated} bytes during 32 warmed scans");
     }
 
@@ -164,12 +165,22 @@ internal static class SpectrumValidation
         Console.WriteLine($"{name}: {allocated} allocated bytes during 32 warmed scans");
     }
 
-    private static long MeasureAllocations(Func<long> operation, string name)
+    private static long MeasureAllocations(Func<long> operation, string name, int warmupMilliseconds = 0)
     {
         long expected = operation();
+        string warmupName = name + " warmup result";
         for (int i = 0; i < 32; i++)
         {
-            MetadataFixture.Require(operation() == expected, name + " warmup result");
+            MetadataFixture.Require(operation() == expected, warmupName);
+        }
+        if (warmupMilliseconds > 0)
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            while (timer.ElapsedMilliseconds < warmupMilliseconds)
+            {
+                MetadataFixture.Require(operation() == expected, warmupName);
+            }
+            Console.WriteLine($"{name}: {warmupMilliseconds} ms additional JIT warmup before the steady state allocation check.");
         }
         long before = GC.GetAllocatedBytesForCurrentThread();
         long sum = 0;

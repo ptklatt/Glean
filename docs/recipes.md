@@ -654,7 +654,7 @@ using Glean.Resolution;
 var options = new AssemblyLoadOptions
 {
     SearchPaths = args.Skip(1).ToArray(),
-    TargetFrameworkMoniker = "net9.0",
+    TargetFrameworkMoniker = "net10.0",
     BindingPolicy = AssemblyBindingPolicy.ExactThenCompatible
 };
 using var closure = AssemblyClosure.Load(args[0], options);

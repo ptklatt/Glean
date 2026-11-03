@@ -93,7 +93,7 @@ public readonly struct TypeContext : IEquatable<TypeContext>
     /// Gets the full type name (Namespace.Name).
     /// </summary>
     /// <remarks>
-    /// Allocates: 2-3 strings. For zero allocation identity checks use <see cref="NameIs"/> and <see cref="NamespaceIs"/>.
+    /// Allocates: 2-3 strings. For zero allocation identity checks use <see cref="NameIs(string)"/> and <see cref="NamespaceIs(string)"/>.
     /// </remarks>
     public string FullName
     {

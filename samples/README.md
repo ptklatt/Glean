@@ -9,32 +9,32 @@ For task focused snippets, see the [usage recipes](../docs/recipes.md).
 Fast traversal:
 
 ```bash
-dotnet run --project samples/FastTraversalSample -- <assembly-path>
+dotnet run --project samples/FastTraversalSample -f net10.0 -- <assembly-path>
 ```
 
 Rich decoding:
 
 ```bash
-dotnet run --project samples/RichDecodingSample -- <assembly-path> [full-type-name]
+dotnet run --project samples/RichDecodingSample -f net10.0 -- <assembly-path> [full-type-name]
 ```
 
 Cross assembly resolution:
 
 ```bash
-dotnet run --project samples/ResolutionSample -- <entry-assembly-path> [search-path...]
+dotnet run --project samples/ResolutionSample -f net10.0 -- <entry-assembly-path> [search-path...]
 ```
 
 Custom signature representation:
 
 ```bash
-dotnet run --project samples/CustomIrSample -- <assembly-path> [full-type-name]
-dotnet run --project samples/CustomIrSample -- <assembly-path> [full-type-name] --resolve --search <dependency-directory>
+dotnet run --project samples/CustomIrSample -f net10.0 -- <assembly-path> [full-type-name]
+dotnet run --project samples/CustomIrSample -f net10.0 -- <assembly-path> [full-type-name] --resolve --search <dependency-directory>
 ```
 
 Full end to end inspection:
 
 ```bash
-dotnet run --project samples/InspectorSample -- <assembly-path> [--type <full-type-name>] [--search <directory>]...
+dotnet run --project samples/InspectorSample -f net10.0 -- <assembly-path> [--type <full-type-name>] [--search <directory>]...
 ```
 
 When using `InspectorSample`, pass real dependency directories with `--search`

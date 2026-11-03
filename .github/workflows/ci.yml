@@ -2,98 +2,77 @@ name: ci
 
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  build-test:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  build-test-package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
-
-      - name: Restore
-        run: dotnet restore test/Glean.Tests/Glean.Tests.csproj
+          global-json-file: global.json
+          dotnet-version: |
+            8.0.x
+            9.0.x
 
       - name: Compute version
-        id: version
-        shell: bash
         run: |
-          base_version="$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' Directory.Build.props)"
-          short_sha="${GITHUB_SHA::7}"
+          $prefix = ([xml](Get-Content Directory.Build.props -Raw)).Project.PropertyGroup.VersionPrefix
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME.StartsWith('v')) {
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+          } else {
+            $version = "$prefix-alpha.$env:GITHUB_RUN_NUMBER"
+          }
+          "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version="${base_version}-alpha.${GITHUB_RUN_NUMBER}"
-          fi
+      - name: Restore
+        run: dotnet restore Glean.slnx
 
-          informational_version="${version}+${short_sha}"
-          artifact_name="glean-net9-${version}"
+      - name: Build library, samples, benchmarks and package verifier
+        run: dotnet build Glean.slnx -c Release --no-restore --nologo -warnaserror -p:Version=$env:PACKAGE_VERSION
 
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "informational_version=${informational_version}" >> "${GITHUB_OUTPUT}"
-          echo "artifact_name=${artifact_name}" >> "${GITHUB_OUTPUT}"
+      - name: Test .NET 8, .NET 9 and .NET 10
+        run: dotnet test test/Glean.Tests/Glean.Tests.csproj -c Release --no-build --no-restore --nologo -p:TestTfmsInParallel=false
 
-      - name: Build
-        run: >
-          dotnet build test/Glean.Tests/Glean.Tests.csproj
-          --configuration Release
-          --no-restore
-          /p:ContinuousIntegrationBuild=true
-          /p:Version=${{ steps.version.outputs.version }}
-          /p:InformationalVersion=${{ steps.version.outputs.informational_version }}
+      - name: Validate .NET 8 benchmark workloads
+        run: dotnet run --project bench/Glean.Benchmarks -c Release -f net8.0 --no-build -- --validate
 
-      - name: Test
-        run: >
-          dotnet test test/Glean.Tests/Glean.Tests.csproj
-          --configuration Release
-          --no-build
-          --no-restore
+      - name: Validate .NET 9 benchmark workloads
+        run: dotnet run --project bench/Glean.Benchmarks -c Release -f net9.0 --no-build -- --validate
 
-      - name: Build benchmarks
-        run: >
-          dotnet build bench/Glean.Benchmarks/Glean.Benchmarks.csproj
-          --configuration Release
-          /p:ContinuousIntegrationBuild=true
-          /p:Version=${{ steps.version.outputs.version }}
-          /p:InformationalVersion=${{ steps.version.outputs.informational_version }}
+      - name: Validate .NET 10 benchmark workloads
+        run: dotnet run --project bench/Glean.Benchmarks -c Release -f net10.0 --no-build -- --validate
 
-      - name: Validate benchmark workloads
-        run: dotnet run --project bench/Glean.Benchmarks -c Release --no-build -- --validate
+      - name: Pack
+        run: dotnet pack src/Glean/Glean.csproj -c Release --no-build --no-restore -o artifacts/packages -p:Version=$env:PACKAGE_VERSION
 
-      - name: Stage library artifact
-        shell: bash
-        run: |
-          artifact_dir="artifacts/${{ steps.version.outputs.artifact_name }}"
-          mkdir -p "${artifact_dir}"
-          cp -R src/Glean/bin/Release/net9.0/. "${artifact_dir}/"
-          cp LICENSE "${artifact_dir}/LICENSE"
+      - name: Inspect packages and compile isolated consumers
+        run: dotnet run --project eng/VerifyPackage -c Release --no-build -- artifacts/packages $env:PACKAGE_VERSION $env:GITHUB_SHA
 
-      - name: Upload library artifact
+      - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.version.outputs.artifact_name }}
-          path: artifacts/${{ steps.version.outputs.artifact_name }}/
-      - name: Package for Pages
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        shell: bash
-        run: |
-          mkdir -p pages
-          cd "artifacts/${{ steps.version.outputs.artifact_name }}"
-          zip -r "../../pages/latest.zip" .
-
-      - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./pages
-          force_orphan: true
+          name: glean-${{ runner.os }}-${{ env.PACKAGE_VERSION }}
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+          if-no-files-found: error

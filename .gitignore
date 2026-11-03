@@ -13,3 +13,4 @@ results/
 *.user
 *.obj
 *.pdb
+artifacts/
