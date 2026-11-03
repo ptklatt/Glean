@@ -51,7 +51,7 @@ internal sealed class TestAssemblyBuilder
     {
         ArgumentNullException.ThrowIfNull(assembly);
 
-        _references.Add(MetadataReference.CreateFromFile(assembly.Location));
+        _references.Add(CreateAssemblyReference(assembly.Location));
         return this;
     }
 
@@ -59,7 +59,7 @@ internal sealed class TestAssemblyBuilder
     {
         ArgumentNullException.ThrowIfNull(assemblyPath);
 
-        _references.Add(MetadataReference.CreateFromFile(assemblyPath));
+        _references.Add(CreateAssemblyReference(assemblyPath));
         return this;
     }
 
@@ -74,8 +74,36 @@ internal sealed class TestAssemblyBuilder
             properties = properties.WithAliases(ImmutableArray.CreateRange(aliases));
         }
 
-        _references.Add(MetadataReference.CreateFromFile(assemblyPath, properties: properties));
+        _references.Add(CreateAssemblyReference(assemblyPath, properties));
         return this;
+    }
+
+    private static MetadataReference CreateAssemblyReference(string assemblyPath, MetadataReferenceProperties properties = default)
+    {
+        var modules = new List<ModuleMetadata>
+        {
+            ModuleMetadata.CreateFromImage(File.ReadAllBytes(assemblyPath))
+        };
+        try
+        {
+            // Snapshot linked modules too so Roslyn never retains fixture file handles.
+            foreach (var name in modules[0].GetModuleNames())
+            {
+                var path = Path.Combine(Path.GetDirectoryName(assemblyPath) ?? "", name);
+                modules.Add(ModuleMetadata.CreateFromImage(File.ReadAllBytes(path)));
+            }
+
+            return AssemblyMetadata.Create(modules).GetReference(filePath: assemblyPath).WithProperties(properties);
+        }
+        catch
+        {
+            foreach (var module in modules)
+            {
+                module.Dispose();
+            }
+
+            throw;
+        }
     }
 
     internal TestAssemblyBuilder WithModuleReference(string modulePath)

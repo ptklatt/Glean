@@ -196,7 +196,7 @@ public sealed class CustomIrSampleTests
               parameter[1]: String [no metadata row]
               parameter[2]: Int32& [seq=3, name=third, flags=Out]
 
-            """, writer.ToString());
+            """.ReplaceLineEndings("\n"), writer.ToString());
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class CustomIrSampleTests
               return: Void [no metadata row]
               parameter[0]: Int32 [no metadata row]
 
-            """, output.ToString());
+            """.ReplaceLineEndings("\n"), output.ToString());
     }
 
     [Fact]
