@@ -169,8 +169,14 @@ void ValidateSymbols(string framework, byte[] assembly, byte[] symbolsBytes)
     var sourceLink = pdb.CustomDebugInformation.Select(pdb.GetCustomDebugInformation).Single(info => pdb.GetGuid(info.Kind) == sourceLinkKind);
     using var links = JsonDocument.Parse(pdb.GetBlobBytes(sourceLink.Value));
     var mappings = links.RootElement.GetProperty("documents").EnumerateObject().ToArray();
-    string prefix = $"https://raw.githubusercontent.com/ptklatt/glean/{revision}/";
-    Require((mappings.Length > 0) && mappings.All(mapping => mapping.Value.GetString()!.StartsWith(prefix, StringComparison.Ordinal)), "SourceLink does not identify the expected repository revision.");
+    const string repositoryPrefix = "https://raw.githubusercontent.com/ptklatt/glean/";
+    string revisionPath = revision + "/";
+    Require((mappings.Length > 0) && mappings.All(mapping =>
+    {
+        string url = mapping.Value.GetString()!;
+        return url.StartsWith(repositoryPrefix, StringComparison.OrdinalIgnoreCase)
+            && url[repositoryPrefix.Length..].StartsWith(revisionPath, StringComparison.Ordinal);
+    }), "SourceLink does not identify the expected repository revision.");
     var embeddedKind = new Guid("0E8A571B-6926-466E-B4AD-8AB04611F5FE");
     Require(pdb.Documents.Count > 0, "Symbols contain no source documents.");
     foreach (var handle in pdb.Documents)
@@ -191,7 +197,9 @@ void ValidateSymbols(string framework, byte[] assembly, byte[] symbolsBytes)
         {
             throw new InvalidDataException("A source document is outside the repository source root.");
         }
-        Require(ResolveSourceLink(mappings, documentName) == prefix + relativePath, "SourceLink resolves a document to the wrong repository path.");
+        string resolved = ResolveSourceLink(mappings, documentName);
+        Require(resolved.StartsWith(repositoryPrefix, StringComparison.OrdinalIgnoreCase)
+            && (resolved[repositoryPrefix.Length..] == revisionPath + relativePath), "SourceLink resolves a document to the wrong repository path.");
         var embedded = pdb.GetCustomDebugInformation(handle).Select(pdb.GetCustomDebugInformation).Single(info => pdb.GetGuid(info.Kind) == embeddedKind);
         using var input = new MemoryStream(pdb.GetBlobBytes(embedded.Value));
         using var header = new BinaryReader(input);
