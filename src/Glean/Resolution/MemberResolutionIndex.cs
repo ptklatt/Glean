@@ -88,7 +88,7 @@ public sealed class MemberResolutionIndex
             var result = new Dictionary<string, MethodDefinitionHandle[]>(byName.Count, StringComparer.Ordinal);
             foreach (var pair in byName)
             {
-                var shaped = pair.Value;
+                var shaped = (MethodShapeCandidate[])pair.Value;
                 var handles = new MethodDefinitionHandle[shaped.Length];
                 for (int i = 0; i < shaped.Length; i++)
                 {
@@ -122,7 +122,7 @@ public sealed class MemberResolutionIndex
         var index = GetOrCreateTypeMemberIndex(reader, typeHandle);
 
         return index.MethodCandidatesByName.TryGetValue(memberName, out var candidates)
-            ? candidates
+            ? (MethodShapeCandidate[])candidates
             : EmptyMethodShapeCandidates;
     }
 
@@ -144,7 +144,7 @@ public sealed class MemberResolutionIndex
         var index = GetOrCreateTypeMemberIndex(reader, typeHandle);
 
         return index.FieldsByName.TryGetValue(memberName, out var candidates)
-            ? candidates
+            ? (FieldDefinitionHandle[])candidates
             : EmptyFieldCandidates;
     }
 
@@ -288,7 +288,7 @@ public sealed class MemberResolutionIndex
     {
         var type = reader.GetTypeDefinition(typeHandle);
 
-        var methodCandidatesWithShapes = new Dictionary<string, CandidateBucket<MethodShapeCandidate>>(StringComparer.Ordinal);
+        var methodCandidatesWithShapes = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (var methodHandle in type.GetMethods())
         {
             var method = reader.GetMethodDefinition(methodHandle);
@@ -297,7 +297,7 @@ public sealed class MemberResolutionIndex
             AddCandidate(methodCandidatesWithShapes, name, new MethodShapeCandidate(methodHandle, method.Signature, hasShape, shape));
         }
 
-        var fieldCandidates = new Dictionary<string, CandidateBucket<FieldDefinitionHandle>>(StringComparer.Ordinal);
+        var fieldCandidates = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (var fieldHandle in type.GetFields())
         {
             var field = reader.GetFieldDefinition(fieldHandle);
@@ -306,45 +306,39 @@ public sealed class MemberResolutionIndex
         }
 
         return new TypeMemberIndex(
-            MaterializeCandidates(methodCandidatesWithShapes),
-            MaterializeCandidates(fieldCandidates));
+            MaterializeCandidates<MethodShapeCandidate>(methodCandidatesWithShapes),
+            MaterializeCandidates<FieldDefinitionHandle>(fieldCandidates));
     }
 
-    private static void AddCandidate<T>(Dictionary<string, CandidateBucket<T>> byName, string name, T candidate)
+    private static void AddCandidate<T>(Dictionary<string, object> byName, string name, T candidate)
     {
         ref var bucket = ref CollectionsMarshal.GetValueRefOrAddDefault(byName, name, out bool exists);
-        if (exists)
+        if (!exists)
         {
-            bucket.Add(candidate);
+            bucket = new T[] { candidate };
+        }
+        else if (bucket is List<T> many)
+        {
+            many.Add(candidate);
         }
         else
         {
-            bucket = new CandidateBucket<T>(candidate);
+            bucket = new List<T> { ((T[])bucket!)[0], candidate };
         }
     }
 
-    private static Dictionary<string, T[]> MaterializeCandidates<T>(Dictionary<string, CandidateBucket<T>> byName)
+    private static Dictionary<string, object> MaterializeCandidates<T>(Dictionary<string, object> byName)
     {
-        var materialized = new Dictionary<string, T[]>(byName.Count, StringComparer.Ordinal);
         foreach (var pair in byName)
         {
-            materialized[pair.Key] = pair.Value.ToArray();
+            if (pair.Value is List<T> many)
+            {
+                ref var bucket = ref CollectionsMarshal.GetValueRefOrNullRef(byName, pair.Key);
+                bucket = many.ToArray();
+            }
         }
-        return materialized;
-    }
-
-    private struct CandidateBucket<T>(T first)
-    {
-        private readonly T _first = first;
-        private List<T>? _many;
-
-        public void Add(T value)
-        {
-            _many ??= new List<T> { _first };
-            _many.Add(value);
-        }
-
-        public readonly T[] ToArray() => _many != null ? _many.ToArray() : [_first];
+        byName.TrimExcess();
+        return byName;
     }
 
     private static bool TryReadMethodSignatureShape(MetadataReader reader, BlobHandle signatureHandle, out MethodSignatureShape shape)
@@ -373,11 +367,11 @@ public sealed class MemberResolutionIndex
     }
 
     private sealed class TypeMemberIndex(
-        Dictionary<string, MethodShapeCandidate[]> methodCandidatesByName,
-        Dictionary<string, FieldDefinitionHandle[]> fieldsByName)
+        Dictionary<string, object> methodCandidatesByName,
+        Dictionary<string, object> fieldsByName)
     {
-        public readonly Dictionary<string, MethodShapeCandidate[]> MethodCandidatesByName = methodCandidatesByName;
-        public readonly Dictionary<string, FieldDefinitionHandle[]> FieldsByName = fieldsByName;
+        public readonly Dictionary<string, object> MethodCandidatesByName = methodCandidatesByName;
+        public readonly Dictionary<string, object> FieldsByName = fieldsByName;
         public Dictionary<string, MethodDefinitionHandle[]>? HandlesByName;
     }
 
