@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Runtime.InteropServices;
 
 using Xunit;
 
@@ -12,6 +13,9 @@ namespace Glean.Tests.Visitors;
 
 public sealed class AdvancedMetadataTraversalTests
 {
+    private const int AllocationWarmupIterations = 32;
+    private const int AllocationMeasurementIterations = 100;
+
     private const string ModuleSource = """
         public static class LinkedModuleType
         {
@@ -191,20 +195,20 @@ public sealed class AdvancedMetadataTraversalTests
         var reader = scope.Metadata.Reader;
         var visitor = new CompleteCountingVisitor();
 
-        for (int i = 0; i < 32; i++)
+        for (int i = 0; i < AllocationWarmupIterations; i++)
         {
             TraverseProfile(profile, reader, ref visitor);
         }
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < AllocationMeasurementIterations; i++)
         {
             TraverseProfile(profile, reader, ref visitor);
         }
         long allocations = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.Equal(0L, allocations);
-        Assert.Equal(reader.TypeDefinitions.Count * 132, visitor.TypeCount);
+        AssertNoTraversalAllocations(profile, stateful: false, allocations);
+        Assert.Equal(reader.TypeDefinitions.Count * (AllocationWarmupIterations + AllocationMeasurementIterations), visitor.TypeCount);
     }
 
     [Theory]
@@ -222,21 +226,35 @@ public sealed class AdvancedMetadataTraversalTests
         var visitor = new StatefulCompleteCountingVisitor();
         var state = new AdvancedTraversalState();
 
-        for (int i = 0; i < 32; i++)
+        for (int i = 0; i < AllocationWarmupIterations; i++)
         {
             TraverseStatefulProfile(profile, reader, ref visitor, ref state);
         }
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < AllocationMeasurementIterations; i++)
         {
             TraverseStatefulProfile(profile, reader, ref visitor, ref state);
         }
         long allocations = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.Equal(0L, allocations);
-        Assert.Equal(reader.TypeDefinitions.Count * 132, state.TypeCount);
+        AssertNoTraversalAllocations(profile, stateful: true, allocations);
+        Assert.Equal(reader.TypeDefinitions.Count * (AllocationWarmupIterations + AllocationMeasurementIterations), state.TypeCount);
         Assert.Equal(state.TypeCount, visitor.TypeCount);
+    }
+
+    private static void AssertNoTraversalAllocations(TraversalProfile profile, bool stateful, long allocations)
+    {
+        if (allocations != 0)
+        {
+            var metadataAssembly = typeof(MetadataReader).Assembly;
+            Assert.Fail(
+                $"Expected zero managed allocations, but observed {allocations} bytes. " +
+                $"Profile: {profile}; stateful: {stateful}; warmup scans: {AllocationWarmupIterations}; " +
+                $"measured scans: {AllocationMeasurementIterations}; runtime: {RuntimeInformation.FrameworkDescription}; " +
+                $"architecture: {RuntimeInformation.ProcessArchitecture}; managed thread: {Environment.CurrentManagedThreadId}; " +
+                $"SRM: {metadataAssembly.FullName}; path: {metadataAssembly.Location}.");
+        }
     }
 
     [Theory]
