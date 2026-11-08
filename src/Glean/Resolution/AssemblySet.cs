@@ -349,39 +349,8 @@ public sealed partial class AssemblySet : IDisposable
         }
         else if (resolutionScope.Kind == HandleKind.TypeReference)
         {
-            // Nested type: ResolutionScope is the enclosing TypeReference.
-            // Recursively resolve the enclosing type, then search its nested types.
-            var enclosingTypeRefHandle = (TypeReferenceHandle)resolutionScope;
-            if (!TryResolveType(reader, enclosingTypeRefHandle, out var enclosingReader, out var enclosingTypeHandle, out reason, ct))
-            {
-                targetReader = null!;
-                targetHandle = default;
-                return false;
-            }
-
-            var enclosingType = enclosingReader.GetTypeDefinition(enclosingTypeHandle);
-            var nestedName = reader.GetString(typeRef.Name);
-
-            foreach (var nestedHandle in enclosingType.GetNestedTypes())
-            {
-                var nestedType = enclosingReader.GetTypeDefinition(nestedHandle);
-                var name = enclosingReader.GetString(nestedType.Name);
-
-                if (string.Equals(name, nestedName, StringComparison.Ordinal))
-                {
-                    int nestedRow = MetadataTokens.GetRowNumber(nestedHandle);
-                    typeCache[handleRow] = new TypeResolutionCacheValue(enclosingReader, nestedRow);
-
-                    targetReader = enclosingReader;
-                    targetHandle = nestedHandle;
-                    return true;
-                }
-            }
-
-            targetReader = null!;
-            targetHandle = default;
-            reason = ResolutionFailureReason.NestedTypeNotFound;
-            return false;
+            return TryResolveNestedTypeReference(reader, typeRefHandle, typeCache,
+                out targetReader, out targetHandle, out reason, ct);
         }
         else
         {
@@ -417,6 +386,85 @@ public sealed partial class AssemblySet : IDisposable
             reason = ResolutionFailureReason.TypeNotFound;
         }
         return false;
+    }
+
+    private bool TryResolveNestedTypeReference(
+        MetadataReader reader,
+        TypeReferenceHandle handle,
+        Dictionary<int, TypeResolutionCacheValue> typeCache,
+        out MetadataReader targetReader,
+        out TypeDefinitionHandle targetHandle,
+        out ResolutionFailureReason reason,
+        CancellationToken ct)
+    {
+        var nestedReferences = new List<TypeReferenceHandle>();
+        MetadataReader enclosingReader;
+        TypeDefinitionHandle enclosingHandle;
+        reason = ResolutionFailureReason.None;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            // A valid enclosing chain cannot exceed the number of TypeRef rows.
+            if (nestedReferences.Count >= reader.TypeReferences.Count)
+            {
+                throw new BadImageFormatException("Type reference resolution scope contains a cycle.");
+            }
+
+            nestedReferences.Add(handle);
+            handle = (TypeReferenceHandle)reader.GetTypeReference(handle).ResolutionScope;
+            int enclosingRow = MetadataTokens.GetRowNumber(handle);
+            if ((_bindingPolicy == AssemblyBindingPolicy.Exact) && typeCache.TryGetValue(enclosingRow, out var cached))
+            {
+                enclosingReader = cached.TargetReader;
+                enclosingHandle = MetadataTokens.TypeDefinitionHandle(cached.TypeDefRow);
+                break;
+            }
+
+            if (reader.GetTypeReference(handle).ResolutionScope.Kind != HandleKind.TypeReference)
+            {
+                if (!TryResolveType(reader, handle, out enclosingReader, out enclosingHandle, out reason, ct))
+                {
+                    targetReader = null!;
+                    targetHandle = default;
+                    return false;
+                }
+                break;
+            }
+        }
+
+        for (int i = nestedReferences.Count - 1; i >= 0; i--)
+        {
+            ct.ThrowIfCancellationRequested();
+            var nestedReference = reader.GetTypeReference(nestedReferences[i]);
+            string nestedName = reader.GetString(nestedReference.Name);
+            TypeDefinitionHandle found = default;
+            foreach (var nestedHandle in enclosingReader.GetTypeDefinition(enclosingHandle).GetNestedTypes())
+            {
+                var nestedType = enclosingReader.GetTypeDefinition(nestedHandle);
+                if (string.Equals(enclosingReader.GetString(nestedType.Name), nestedName, StringComparison.Ordinal))
+                {
+                    found = nestedHandle;
+                    break;
+                }
+            }
+
+            if (found.IsNil)
+            {
+                targetReader = null!;
+                targetHandle = default;
+                reason = ResolutionFailureReason.NestedTypeNotFound;
+                return false;
+            }
+
+            enclosingHandle = found;
+            typeCache[MetadataTokens.GetRowNumber(nestedReferences[i])] =
+                new TypeResolutionCacheValue(enclosingReader, MetadataTokens.GetRowNumber(found));
+        }
+
+        targetReader = enclosingReader;
+        targetHandle = enclosingHandle;
+        return true;
     }
 
     private bool TryResolveForwardedType(

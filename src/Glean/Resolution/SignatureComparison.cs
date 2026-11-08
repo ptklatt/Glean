@@ -292,47 +292,45 @@ internal static class SignatureComparison
             return true;
         }
 
-        var names = new List<string>();
-        if (!TryPopulateTypeReferenceIdentity(signature.Reader, signature.Handle, names, out var nameSpace, out var scope, assemblySet))
+        var handles = new List<TypeReferenceHandle>();
+        var handle = signature.Handle;
+        while (true)
+        {
+            // A valid enclosing chain cannot exceed the number of TypeRef rows.
+            if (handles.Count >= reader.TypeReferences.Count)
+            {
+                throw new BadImageFormatException("Type reference resolution scope contains a cycle.");
+            }
+
+            handles.Add(handle);
+            if (typeReference.ResolutionScope.Kind != HandleKind.TypeReference)
+            {
+                break;
+            }
+
+            handle = (TypeReferenceHandle)typeReference.ResolutionScope;
+            typeReference = reader.GetTypeReference(handle);
+        }
+
+        string outerName = reader.GetString(typeReference.Name);
+        string nameSpace = reader.GetString(typeReference.Namespace);
+        var scope = CreateReferenceScope(reader, typeReference.ResolutionScope, assemblySet);
+        if (scope.Kind == NamedTypeScopeKind.Unknown)
         {
             identity = default;
             return false;
         }
 
-        identity = new NamedTypeIdentity(nameSpace, names.ToArray(), scope);
-        return true;
-    }
-
-    private static bool TryPopulateTypeReferenceIdentity(
-        MetadataReader reader,
-        TypeReferenceHandle handle,
-        List<string> names,
-        out string nameSpace,
-        out NamedTypeScopeIdentity scope,
-        AssemblySet? assemblySet)
-    {
-        var typeReference = reader.GetTypeReference(handle);
-        if (typeReference.ResolutionScope.Kind == HandleKind.TypeReference)
+        var names = new string[handles.Count];
+        names[0] = outerName;
+        for (int i = 1; i < names.Length; i++)
         {
-            if (!TryPopulateTypeReferenceIdentity(
-                    reader,
-                    (TypeReferenceHandle)typeReference.ResolutionScope,
-                    names,
-                    out nameSpace,
-                    out scope,
-                    assemblySet))
-            {
-                return false;
-            }
-
-            names.Add(reader.GetString(typeReference.Name));
-            return true;
+            var nestedReference = reader.GetTypeReference(handles[handles.Count - i - 1]);
+            names[i] = reader.GetString(nestedReference.Name);
         }
 
-        names.Add(reader.GetString(typeReference.Name));
-        nameSpace = reader.GetString(typeReference.Namespace);
-        scope = CreateReferenceScope(reader, typeReference.ResolutionScope, assemblySet);
-        return scope.Kind != NamedTypeScopeKind.Unknown;
+        identity = new NamedTypeIdentity(nameSpace, names, scope);
+        return true;
     }
 
     private static NamedTypeScopeIdentity CreateDefinitionScope(MetadataReader reader, AssemblySet? assemblySet = null)
