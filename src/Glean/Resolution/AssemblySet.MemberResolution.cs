@@ -540,9 +540,9 @@ public sealed partial class AssemblySet
         bool sameReader,
         ref string? referenceMemberName)
     {
-        if (sameReader)
+        if (sameReader && (definitionName == memberRef.Name))
         {
-            return definitionName == memberRef.Name;
+            return true;
         }
 
         referenceMemberName ??= referenceReader.GetString(memberRef.Name);
