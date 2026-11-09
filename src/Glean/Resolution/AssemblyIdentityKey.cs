@@ -148,15 +148,14 @@ internal readonly struct AssemblyIdentityKey : IEquatable<AssemblyIdentityKey>
         unsafe
         {
             var bytes = new ReadOnlySpan<byte>(blobReader.StartPointer, blobReader.Length);
-            bool isFullPublicKey = ((flags & AssemblyFlags.PublicKey) != 0) || (bytes.Length > PublicKeyTokenSizeBytes);
+            bool isFullPublicKey = (flags & AssemblyFlags.PublicKey) != 0;
 
             // Token path (exact 8 bytes, not full key).
             if (!isFullPublicKey)
             {
                 if (bytes.Length != PublicKeyTokenSizeBytes)
                 {
-                    hasToken = false;
-                    return 0;
+                    throw new BadImageFormatException("Public key tokens must contain exactly 8 bytes.");
                 }
 
                 hasToken = true;

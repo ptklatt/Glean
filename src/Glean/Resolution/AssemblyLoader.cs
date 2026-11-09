@@ -498,7 +498,10 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
                 return loadResult;
             }
 
-            CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
+            if (loadResult.FailureKind == AssemblyDependencyLoadFailureKind.IdentityMismatch)
+            {
+                CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
+            }
 
             if (loadResult.HasFailure)
             {
@@ -535,7 +538,10 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
                 return loadResult;
             }
 
-            CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
+            if (loadResult.FailureKind == AssemblyDependencyLoadFailureKind.IdentityMismatch)
+            {
+                CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
+            }
 
             if (loadResult.HasFailure)
             {
@@ -580,9 +586,16 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
             return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.NotAssembly, candidate.Path);
         }
 
-        if (!requestedIdentity.MatchesDefinition(candidate.Reader))
+        try
         {
-            return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.IdentityMismatch, candidate.Path);
+            if (!requestedIdentity.MatchesDefinition(candidate.Reader))
+            {
+                return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.IdentityMismatch, candidate.Path);
+            }
+        }
+        catch (BadImageFormatException)
+        {
+            return DependencyLoadResult.Failed(AssemblyDependencyLoadFailureKind.BadImageFormat, candidate.Path);
         }
 
         return candidate;
