@@ -83,34 +83,38 @@ public sealed class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<T
             }
             else
             {
-                string nameSpace = string.Empty;
-                string name      = typeName;
-                int lastDot      = typeName.LastIndexOf('.');
-                if (lastDot >= 0)
+                if (IsSimpleSerializedName(typeName) &&
+                    TypeName.TryParse(typeName, out var parsedName, new TypeNameParseOptions { MaxNodes = typeName.Length }) &&
+                    (parsedName.IsSimple))
                 {
-                    nameSpace = typeName.Substring(0, lastDot);
-                    name      = typeName.Substring(lastDot + 1);
-                }
-
-                foreach (var tdHandle in _reader.TypeDefinitions)
-                {
-                    var td = _reader.GetTypeDefinition(tdHandle);
-                    if (!_reader.StringComparer.Equals(td.Namespace, nameSpace) ||
-                        !_reader.StringComparer.Equals(td.Name, name))
+                    var names = new List<string>();
+                    while (parsedName.IsNested)
                     {
-                        continue;
+                        names.Add(TypeName.Unescape(parsedName.Name));
+                        parsedName = parsedName.DeclaringType;
                     }
+                    names.Add(TypeName.Unescape(parsedName.Name));
+                    string nameSpace = TypeName.Unescape(parsedName.Namespace);
 
-                    foreach (var fieldHandle in td.GetFields())
+                    foreach (var tdHandle in _reader.TypeDefinitions)
                     {
-                        var field = _reader.GetFieldDefinition(fieldHandle);
-                        if (!_reader.StringComparer.Equals(field.Name, "value__")) { continue; }
-
-                        var sig = field.DecodeSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
-                        if (sig is PrimitiveTypeSignature prim)
+                        var td = _reader.GetTypeDefinition(tdHandle);
+                        if (!MatchesSerializedName(td, nameSpace, names))
                         {
-                            _serializedNameEnumCache[typeName] = prim.TypeCode;
-                            return prim.TypeCode;
+                            continue;
+                        }
+
+                        foreach (var fieldHandle in td.GetFields())
+                        {
+                            var field = _reader.GetFieldDefinition(fieldHandle);
+                            if (!_reader.StringComparer.Equals(field.Name, "value__")) { continue; }
+
+                            var sig = field.DecodeSignature(SignatureTypeProvider.Instance, SignatureDecodeContext.Empty);
+                            if (sig is PrimitiveTypeSignature prim)
+                            {
+                                _serializedNameEnumCache[typeName] = prim.TypeCode;
+                                return prim.TypeCode;
+                            }
                         }
                     }
                 }
@@ -151,6 +155,55 @@ public sealed class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<T
         }
 
         throw new BadImageFormatException($"Cannot resolve underlying enum type for {type}");
+    }
+
+    private static bool IsSimpleSerializedName(string name)
+    {
+        bool escaped = false;
+        foreach (char character in name)
+        {
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if (character == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if ((character == '[') || (character == ']') || (character == '*') || (character == '&'))
+            {
+                return false;
+            }
+        }
+        return (name.Length != 0) && !escaped;
+    }
+
+    private bool MatchesSerializedName(TypeDefinition definition, string nameSpace, List<string> names)
+    {
+        for (int i = 0; i < names.Count; i++)
+        {
+            if (!_reader.StringComparer.Equals(definition.Name, names[i]))
+            {
+                return false;
+            }
+            if (i == names.Count - 1)
+            {
+                return (!definition.IsNested) && _reader.StringComparer.Equals(definition.Namespace, nameSpace);
+            }
+            if (!definition.IsNested)
+            {
+                return false;
+            }
+            var parent = definition.GetDeclaringType();
+            if (parent.IsNil)
+            {
+                return false;
+            }
+            definition = _reader.GetTypeDefinition(parent);
+        }
+        return false;
     }
 
     public bool IsSystemType(TypeSignature type)
