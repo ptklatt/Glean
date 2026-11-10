@@ -35,8 +35,10 @@ public sealed class TypeDefinitionSignature : TypeSignature
         _handle = handle;
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.TypeDefinition;
 
+    /// <inheritdoc/>
     public override bool? IsValueType
     {
         get
@@ -78,6 +80,7 @@ public sealed class TypeDefinitionSignature : TypeSignature
         }
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
@@ -101,17 +104,21 @@ public sealed class TypeDefinitionSignature : TypeSignature
         return _reader.StringComparer.Equals(_reader.GetModuleDefinition().Name, scope);
     }
 
+    /// <summary>Checks whether the other signature refers to the same reader and type definition handle.</summary>
     public override bool Equals(TypeSignature? other)
         => (other is TypeDefinitionSignature t) && (t._handle == _handle) && ReferenceEquals(t._reader, _reader);
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitTypeDefinition(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(_reader, _handle);
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         var typeDef = _reader.GetTypeDefinition(_handle);

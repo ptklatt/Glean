@@ -25,24 +25,28 @@ public struct FieldEnumerator : IStructEnumerator<Contexts.FieldContext>
         _enumerator = collection.GetEnumerator();
     }
 
+    /// <inheritdoc/>
     public FieldContext Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => FieldContext.UnsafeCreate(_reader, _enumerator.Current);
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext()
     {
         return _enumerator.MoveNext();
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public FieldEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

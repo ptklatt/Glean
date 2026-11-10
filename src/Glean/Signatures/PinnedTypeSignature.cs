@@ -21,27 +21,34 @@ public sealed class PinnedTypeSignature : TypeSignature
         ElementType = elementType ?? throw new ArgumentNullException(nameof(elementType));
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.Pinned;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => ElementType.IsValueType;
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
         return ElementType.Is(ns, name, scope);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
         => (other is PinnedTypeSignature p) && (ElementType.Equals(p.ElementType));
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitPinnedType(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, ElementType);
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         sb.Append("pinned ");

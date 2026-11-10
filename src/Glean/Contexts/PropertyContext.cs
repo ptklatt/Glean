@@ -11,6 +11,9 @@ namespace Glean.Contexts;
 /// <summary>
 /// Zero allocation context for PropertyDefinition.
 /// </summary>
+/// <remarks>
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
+/// </remarks>
 public readonly struct PropertyContext : IEquatable<PropertyContext>
 {
     private readonly MetadataReader _reader;
@@ -26,6 +29,9 @@ public readonly struct PropertyContext : IEquatable<PropertyContext>
         get => TypeContext.Create(_reader, _definition.GetDeclaringType());
     }
 
+    /// <summary>Creates a context over the specified metadata reader and row handle.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is nil.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static PropertyContext Create(MetadataReader reader, PropertyDefinitionHandle handle)
     {
@@ -49,10 +55,15 @@ public readonly struct PropertyContext : IEquatable<PropertyContext>
         _definition = definition;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public PropertyDefinitionHandle Handle => _handle;
+    /// <summary>Gets the underlying metadata definition.</summary>
     public PropertyDefinition Definition => _definition;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -82,6 +93,7 @@ public readonly struct PropertyContext : IEquatable<PropertyContext>
     /// </summary>
     public StringHandle NameHandle => _definition.Name;
 
+    /// <summary>Gets the metadata flags for this row.</summary>
     public PropertyAttributes Attributes => _definition.Attributes;
 
     /// <summary>
@@ -213,6 +225,7 @@ public readonly struct PropertyContext : IEquatable<PropertyContext>
         return true;
     }
 
+    /// <summary>Checks whether both contexts refer to the same reader and row handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(PropertyContext other)
     {
@@ -220,21 +233,25 @@ public readonly struct PropertyContext : IEquatable<PropertyContext>
                ReferenceEquals(_reader, other._reader);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
         return obj is PropertyContext other && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return HashCode.Combine(_reader, _handle);
     }
 
+    /// <summary>Checks whether the contexts refer to the same metadata.</summary>
     public static bool operator ==(PropertyContext left, PropertyContext right)
     {
         return left.Equals(right);
     }
 
+    /// <summary>Checks whether the contexts refer to different metadata.</summary>
     public static bool operator !=(PropertyContext left, PropertyContext right)
     {
         return !left.Equals(right);

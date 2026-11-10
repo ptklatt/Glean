@@ -68,8 +68,10 @@ public struct AllMemberAttributeEnumerator : IStructEnumerator<Contexts.CustomAt
         _eventAttrEnum  = default;
     }
 
+    /// <inheritdoc/>
     public CustomAttributeContext Current => _current;
 
+    /// <inheritdoc/>
     public bool MoveNext()
     {
         while (true)
@@ -196,9 +198,11 @@ public struct AllMemberAttributeEnumerator : IStructEnumerator<Contexts.CustomAt
         }
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public AllMemberAttributeEnumerator GetEnumerator() => this;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

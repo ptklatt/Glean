@@ -6,12 +6,18 @@ namespace Glean.Contexts;
 /// <summary>
 /// Zero allocation context for TypeReference.
 /// </summary>
+/// <remarks>
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
+/// </remarks>
 public readonly struct TypeReferenceContext : IEquatable<TypeReferenceContext>
 {
     private readonly MetadataReader _reader;
     private readonly TypeReferenceHandle _handle;
     private readonly TypeReference _reference;
 
+    /// <summary>Creates a context over the specified metadata reader and row handle.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is nil.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static TypeReferenceContext Create(MetadataReader reader, TypeReferenceHandle handle)
     {
@@ -28,10 +34,15 @@ public readonly struct TypeReferenceContext : IEquatable<TypeReferenceContext>
         _reference = reference;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public TypeReferenceHandle Handle => _handle;
+    /// <summary>Gets the underlying metadata reference row.</summary>
     public TypeReference Reference => _reference;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -160,27 +171,32 @@ public readonly struct TypeReferenceContext : IEquatable<TypeReferenceContext>
     /// </summary>
     public EntityHandle ResolutionScope => _reference.ResolutionScope;
 
+    /// <summary>Checks whether both contexts refer to the same reader and row handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(TypeReferenceContext other)
     {
         return (_handle == other._handle) && ReferenceEquals(_reader, other._reader);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
         return obj is TypeReferenceContext other && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return HashCode.Combine(_reader, _handle);
     }
 
+    /// <summary>Checks whether the contexts refer to the same metadata.</summary>
     public static bool operator ==(TypeReferenceContext left, TypeReferenceContext right)
     {
         return left.Equals(right);
     }
 
+    /// <summary>Checks whether the contexts refer to different metadata.</summary>
     public static bool operator !=(TypeReferenceContext left, TypeReferenceContext right)
     {
         return !left.Equals(right);

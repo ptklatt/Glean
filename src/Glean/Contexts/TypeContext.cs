@@ -18,6 +18,7 @@ namespace Glean.Contexts;
 /// This is the primary fast tier type API. It keeps both the raw
 /// <see cref="MetadataReader"/> and <see cref="TypeDefinition"/> visible so callers can mix
 /// convenience helpers with direct System.Reflection.Metadata access.
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
 /// </remarks>
 public readonly struct TypeContext : IEquatable<TypeContext>
 {
@@ -51,10 +52,15 @@ public readonly struct TypeContext : IEquatable<TypeContext>
         _definition = definition;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public TypeDefinitionHandle Handle => _handle;
+    /// <summary>Gets the underlying metadata definition.</summary>
     public TypeDefinition Definition => _definition;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

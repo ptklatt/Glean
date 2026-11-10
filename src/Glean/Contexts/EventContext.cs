@@ -11,6 +11,9 @@ namespace Glean.Contexts;
 /// <summary>
 /// Zero allocation context for EventDefinition.
 /// </summary>
+/// <remarks>
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
+/// </remarks>
 public readonly struct EventContext : IEquatable<EventContext>
 {
     private readonly MetadataReader _reader;
@@ -26,6 +29,9 @@ public readonly struct EventContext : IEquatable<EventContext>
         get => TypeContext.Create(_reader, _definition.GetDeclaringType());
     }
 
+    /// <summary>Creates a context over the specified metadata reader and row handle.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is nil.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EventContext Create(MetadataReader reader, EventDefinitionHandle handle)
     {
@@ -49,10 +55,15 @@ public readonly struct EventContext : IEquatable<EventContext>
         _definition = definition;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public EventDefinitionHandle Handle => _handle;
+    /// <summary>Gets the underlying metadata definition.</summary>
     public EventDefinition Definition => _definition;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -73,6 +84,7 @@ public readonly struct EventContext : IEquatable<EventContext>
     /// </summary>
     public StringHandle NameHandle => _definition.Name;
 
+    /// <summary>Gets the metadata flags for this row.</summary>
     public EventAttributes Attributes => _definition.Attributes;
 
     /// <summary>
@@ -146,27 +158,32 @@ public readonly struct EventContext : IEquatable<EventContext>
         return true;
     }
 
+    /// <summary>Checks whether both contexts refer to the same reader and row handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(EventContext other)
     {
         return (_handle == other._handle) && ReferenceEquals(_reader, other._reader);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
         return (obj is EventContext other) && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return HashCode.Combine(_reader, _handle);
     }
 
+    /// <summary>Checks whether the contexts refer to the same metadata.</summary>
     public static bool operator ==(EventContext left, EventContext right)
     {
         return left.Equals(right);
     }
 
+    /// <summary>Checks whether the contexts refer to different metadata.</summary>
     public static bool operator !=(EventContext left, EventContext right)
     {
         return !left.Equals(right);

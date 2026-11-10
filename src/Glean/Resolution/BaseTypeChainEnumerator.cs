@@ -41,12 +41,14 @@ public struct BaseTypeChainEnumerator : IStructEnumerator<TypeContext>
         _finished = false;
     }
 
+    /// <inheritdoc/>
     public TypeContext Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _current;
     }
 
+    /// <inheritdoc/>
     public bool MoveNext()
     {
         if (_finished)
@@ -79,12 +81,14 @@ public struct BaseTypeChainEnumerator : IStructEnumerator<TypeContext>
         return true;
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public BaseTypeChainEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

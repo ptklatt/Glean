@@ -44,9 +44,11 @@ public struct ManifestResourceEnumerator : IStructEnumerator<ManifestResourceCon
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext() => _enumerator.MoveNext();
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ManifestResourceEnumerator GetEnumerator() => this;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

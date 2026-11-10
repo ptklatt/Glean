@@ -28,16 +28,20 @@ public sealed class ArraySignature : TypeSignature
         Shape = shape;
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.Array;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => false; // Arrays are always reference types
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
         return false; // Arrays never match simple type names
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
     {
         if (other is not ArraySignature a)                          { return false; }
@@ -56,12 +60,14 @@ public sealed class ArraySignature : TypeSignature
         return true;
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitArray(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var hc = new HashCode();
@@ -80,6 +86,7 @@ public sealed class ArraySignature : TypeSignature
         return hc.ToHashCode();
     }
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         ElementType.FormatTo(sb);

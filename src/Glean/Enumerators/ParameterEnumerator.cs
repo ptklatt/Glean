@@ -27,24 +27,28 @@ public struct ParameterEnumerator : IStructEnumerator<Contexts.ParameterContext>
         _enumerator = collection.GetEnumerator();
     }
 
+    /// <inheritdoc/>
     public ParameterContext Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => ParameterContext.UnsafeCreate(_reader, _enumerator.Current, _declaringMethod);
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext()
     {
         return _enumerator.MoveNext();
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ParameterEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

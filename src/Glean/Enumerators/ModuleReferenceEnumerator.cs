@@ -39,6 +39,7 @@ public struct ModuleReferenceEnumerator : IStructEnumerator<ModuleReferenceConte
         get => ModuleReferenceContext.Create(_reader, _current);
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext()
     {
@@ -52,12 +53,14 @@ public struct ModuleReferenceEnumerator : IStructEnumerator<ModuleReferenceConte
         return true;
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ModuleReferenceEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

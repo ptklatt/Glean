@@ -6,12 +6,18 @@ namespace Glean.Contexts;
 /// <summary>
 /// Zero allocation context for CustomAttribute.
 /// </summary>
+/// <remarks>
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
+/// </remarks>
 public readonly struct CustomAttributeContext : IEquatable<CustomAttributeContext>
 {
     private readonly MetadataReader _reader;
     private readonly CustomAttributeHandle _handle;
     private readonly CustomAttribute _attribute;
 
+    /// <summary>Creates a context over the specified metadata reader and row handle.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is nil.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static CustomAttributeContext Create(MetadataReader reader, CustomAttributeHandle handle)
     {
@@ -35,10 +41,15 @@ public readonly struct CustomAttributeContext : IEquatable<CustomAttributeContex
         _attribute = attribute;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public CustomAttributeHandle Handle => _handle;
+    /// <summary>Gets the underlying custom attribute row.</summary>
     public CustomAttribute Attribute => _attribute;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -112,27 +123,32 @@ public readonly struct CustomAttributeContext : IEquatable<CustomAttributeContex
         return _attribute.DecodeValue(provider);
     }
 
+    /// <summary>Checks whether both contexts refer to the same reader and row handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(CustomAttributeContext other)
     {
         return (_handle == other._handle) && ReferenceEquals(_reader, other._reader);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
         return obj is CustomAttributeContext other && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return HashCode.Combine(_reader, _handle);
     }
 
+    /// <summary>Checks whether the contexts refer to the same metadata.</summary>
     public static bool operator ==(CustomAttributeContext left, CustomAttributeContext right)
     {
         return left.Equals(right);
     }
 
+    /// <summary>Checks whether the contexts refer to different metadata.</summary>
     public static bool operator !=(CustomAttributeContext left, CustomAttributeContext right)
     {
         return !left.Equals(right);

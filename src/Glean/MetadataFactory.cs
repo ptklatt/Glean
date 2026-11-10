@@ -58,6 +58,7 @@ public static class MetadataFactory
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>Releases the pinned buffer if the scope was not disposed.</summary>
         ~ManagedScope()
         {
             if (_pinnedHandle.IsAllocated)

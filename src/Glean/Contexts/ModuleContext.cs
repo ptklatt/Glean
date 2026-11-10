@@ -13,12 +13,15 @@ namespace Glean.Contexts;
 /// This is the primary fast tier module API. It keeps the underlying
 /// <see cref="MetadataReader"/> visible via <see cref="Reader"/> so callers can mix
 /// convenience helpers with direct System.Reflection.Metadata access.
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
 /// </remarks>
 public readonly struct ModuleContext : IEquatable<ModuleContext>
 {
     private readonly MetadataReader _reader;
     private readonly ModuleDefinition _definition;
 
+    /// <summary>Creates a context over the specified metadata reader.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ModuleContext Create(MetadataReader reader)
     {
@@ -36,6 +39,7 @@ public readonly struct ModuleContext : IEquatable<ModuleContext>
         _definition = definition;
     }
 
+    /// <summary>Gets the underlying metadata definition.</summary>
     public ModuleDefinition Definition => _definition;
 
     /// <summary>
@@ -43,6 +47,8 @@ public readonly struct ModuleContext : IEquatable<ModuleContext>
     /// </summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks whether a reader is present.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -218,27 +224,32 @@ public readonly struct ModuleContext : IEquatable<ModuleContext>
         return true;
     }
 
+    /// <summary>Checks whether both contexts refer to the same reader.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(ModuleContext other)
     {
         return ReferenceEquals(_reader, other._reader);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
         return (obj is ModuleContext other) && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return _reader?.GetHashCode() ?? 0;
     }
 
+    /// <summary>Checks whether the contexts refer to the same metadata.</summary>
     public static bool operator ==(ModuleContext left, ModuleContext right)
     {
         return left.Equals(right);
     }
 
+    /// <summary>Checks whether the contexts refer to different metadata.</summary>
     public static bool operator !=(ModuleContext left, ModuleContext right)
     {
         return !left.Equals(right);

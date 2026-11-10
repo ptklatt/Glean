@@ -40,8 +40,10 @@ public struct FilteredCustomAttributeEnumerator : IStructEnumerator<CustomAttrib
         _current = default;
     }
 
+    /// <inheritdoc/>
     public CustomAttributeContext Current => _current;
 
+    /// <inheritdoc/>
     public bool MoveNext()
     {
         while (_enumerator.MoveNext())
@@ -59,12 +61,14 @@ public struct FilteredCustomAttributeEnumerator : IStructEnumerator<CustomAttrib
         return false;
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public FilteredCustomAttributeEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

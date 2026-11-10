@@ -6,12 +6,18 @@ namespace Glean.Contexts;
 /// <summary>
 /// Zero allocation context for MethodImplementation (explicit interface implementation).
 /// </summary>
+/// <remarks>
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
+/// </remarks>
 public readonly struct MethodImplementationContext : IEquatable<MethodImplementationContext>
 {
     private readonly MetadataReader _reader;
     private readonly MethodImplementationHandle _handle;
     private readonly MethodImplementation _implementation;
 
+    /// <summary>Creates a context over the specified metadata reader and row handle.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is nil.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static MethodImplementationContext Create(MetadataReader reader, MethodImplementationHandle handle)
     {
@@ -28,10 +34,15 @@ public readonly struct MethodImplementationContext : IEquatable<MethodImplementa
         _implementation = implementation;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public MethodImplementationHandle Handle => _handle;
+    /// <summary>Gets the underlying method implementation row.</summary>
     public MethodImplementation Implementation => _implementation;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -53,27 +64,32 @@ public readonly struct MethodImplementationContext : IEquatable<MethodImplementa
     /// </summary>
     public EntityHandle MethodDeclaration => _implementation.MethodDeclaration;
 
+    /// <summary>Checks whether both contexts refer to the same reader and row handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(MethodImplementationContext other)
     {
         return (_handle == other._handle) && ReferenceEquals(_reader, other._reader);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
         return obj is MethodImplementationContext other && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return HashCode.Combine(_reader, _handle);
     }
 
+    /// <summary>Checks whether the contexts refer to the same metadata.</summary>
     public static bool operator ==(MethodImplementationContext left, MethodImplementationContext right)
     {
         return left.Equals(right);
     }
 
+    /// <summary>Checks whether the contexts refer to different metadata.</summary>
     public static bool operator !=(MethodImplementationContext left, MethodImplementationContext right)
     {
         return !left.Equals(right);

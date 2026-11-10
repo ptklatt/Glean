@@ -30,36 +30,44 @@ public sealed class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<T
         _enumResolver = enumResolver;
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetPrimitiveType(PrimitiveTypeCode typeCode)
     {
         return PrimitiveTypeSignature.Get(typeCode);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetSystemType()
     {
         return new SerializedTypeNameSignature("System.Type");
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetSZArrayType(TypeSignature elementType)
     {
         return new SZArraySignature(elementType);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
     {
         return new TypeDefinitionSignature(reader, handle);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind)
     {
         return new TypeReferenceSignature(reader, handle);
     }
 
+    /// <summary>Wraps the serialized type name without resolving it.</summary>
     public TypeSignature GetTypeFromSerializedName(string name)
     {
         return new SerializedTypeNameSignature(name);
     }
 
+    /// <summary>Finds the enum storage type locally, or uses the enum resolver for type references.</summary>
+    /// <exception cref="BadImageFormatException">The enum storage type cannot be resolved.</exception>
     public PrimitiveTypeCode GetUnderlyingEnumType(TypeSignature type)
     {
         if (type is SerializedTypeNameSignature serialized)
@@ -206,6 +214,7 @@ public sealed class CustomAttributeTypeProvider : ICustomAttributeTypeProvider<T
         return false;
     }
 
+    /// <inheritdoc/>
     public bool IsSystemType(TypeSignature type)
     {
         bool result = false;

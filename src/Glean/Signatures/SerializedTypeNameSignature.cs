@@ -21,10 +21,14 @@ public sealed class SerializedTypeNameSignature : TypeSignature
         SerializedName = serializedName ?? throw new ArgumentNullException(nameof(serializedName));
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.SerializedTypeName;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => null; // Cannot determine from name alone
 
+    /// <summary>Checks whether the serialized name contains the namespace and name as an ordinal substring.</summary>
+    /// <remarks>This is a heuristic match; <paramref name="scope"/> is ignored.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
@@ -33,18 +37,22 @@ public sealed class SerializedTypeNameSignature : TypeSignature
         return SerializedName.Contains(expectedFullName, StringComparison.Ordinal);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
         => (other is SerializedTypeNameSignature s) &&
            string.Equals(SerializedName, s.SerializedName, StringComparison.Ordinal);
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitSerializedTypeName(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, SerializedName);
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         sb.Append(SerializedName);

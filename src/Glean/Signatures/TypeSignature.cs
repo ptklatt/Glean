@@ -3,6 +3,8 @@ using System.Text;
 
 namespace Glean.Signatures;
 
+/// <summary>A decoded type signature that can be inspected, visited, or formatted.</summary>
+/// <remarks>Nodes backed by metadata borrow their reader; keep its owner alive while using the graph.</remarks>
 public abstract class TypeSignature : IEquatable<TypeSignature>
 {
     /// <summary>
@@ -24,6 +26,7 @@ public abstract class TypeSignature : IEquatable<TypeSignature>
     /// <param name="name">The type name to match.</param>
     /// <param name="scope">Optional resolution scope name (assembly/module name) to match.</param>
     /// <returns>True if the type matches; otherwise, false.</returns>
+    /// <remarks>Matching rules depend on the node kind. Primitive and serialized name nodes ignore scope.</remarks>
     public abstract bool Is(string ns, string name, string? scope = null);
 
     /// <summary>
@@ -61,8 +64,11 @@ public abstract class TypeSignature : IEquatable<TypeSignature>
     }
 
     /// <summary>
-    /// Determines whether this signature is structurally equal to another.
+    /// Compares signatures using each node kind's equality rules.
     /// </summary>
+    /// <remarks>
+    /// Type definitions use reader and handle identity; type references compare namespace, name and scope name.
+    /// </remarks>
     public abstract bool Equals(TypeSignature? other);
 
     /// <inheritdoc/>

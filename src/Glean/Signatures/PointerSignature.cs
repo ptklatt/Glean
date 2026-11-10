@@ -21,27 +21,34 @@ public sealed class PointerSignature : TypeSignature
         ElementType = elementType ?? throw new ArgumentNullException(nameof(elementType));
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.Pointer;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => false;
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
         return false;
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
         => (other is PointerSignature p) && (ElementType.Equals(p.ElementType));
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitPointer(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, ElementType);
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         ElementType.FormatTo(sb);

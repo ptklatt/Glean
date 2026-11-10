@@ -22,16 +22,21 @@ public sealed class FunctionPointerSignature : TypeSignature
         Signature = signature;
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.FunctionPointer;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => false;
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
         return false;
     }
 
+    /// <summary>Compares return and parameter types with another function pointer signature.</summary>
+    /// <remarks>The header, generic parameter count and required parameter count are not compared.</remarks>
     public override bool Equals(TypeSignature? other)
     {
         if (other is not FunctionPointerSignature f)                                { return false; }
@@ -44,12 +49,14 @@ public sealed class FunctionPointerSignature : TypeSignature
         return true;
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitFunctionPointer(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var hc = new HashCode();
@@ -62,6 +69,7 @@ public sealed class FunctionPointerSignature : TypeSignature
         return hc.ToHashCode();
     }
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         sb.Append("method ");

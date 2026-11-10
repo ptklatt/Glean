@@ -135,6 +135,20 @@ resolution, move up a tier only where it pays for itself.
 See [performance notes](https://github.com/ptklatt/glean/blob/master/docs/performance.md) for allocation boundaries and the
 scope of the regression tests.
 
+## Reader Lifetime
+
+Keep the owning `AssemblyScope`, `AssemblyClosure`, `AssemblyLoader`, or metadata
+factory scope alive while using its readers. Contexts, enumerators, metadata backed
+signatures and `AssemblySet` borrow those readers. Disposing an `AssemblySet` clears
+its state; it does not dispose the readers. A context's `IsValid` checks for a
+reader and, where applicable, a row handle. It does not validate metadata or check
+whether the owner has been disposed.
+
+`AssemblyLoader`, `AssemblySet` and `CustomAttributeTypeProvider` hold mutable
+state and are not thread safe. Keep their use and disposal on one thread, or
+synchronize access externally. Resolution analyzes metadata; it does not reproduce
+runtime binding, redirects or `AssemblyLoadContext` behavior.
+
 ## Samples
 
 Runnable samples live under [`samples`](https://github.com/ptklatt/glean/blob/master/samples/README.md):

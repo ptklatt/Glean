@@ -41,9 +41,11 @@ public struct NestedTypeEnumerator : IStructEnumerator<Contexts.TypeContext>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext() => _enumerator.MoveNext();
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public NestedTypeEnumerator GetEnumerator() => this;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

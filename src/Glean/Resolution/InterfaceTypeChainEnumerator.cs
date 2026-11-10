@@ -48,12 +48,14 @@ public struct InterfaceTypeChainEnumerator : IStructEnumerator<TypeContext>
         _finished = false;
     }
 
+    /// <inheritdoc/>
     public TypeContext Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _current;
     }
 
+    /// <inheritdoc/>
     public bool MoveNext()
     {
         if (_finished)
@@ -115,12 +117,15 @@ public struct InterfaceTypeChainEnumerator : IStructEnumerator<TypeContext>
         }
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
+    /// <remarks>Copies can share traversal state after iteration has started. Do not interleave them.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public InterfaceTypeChainEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

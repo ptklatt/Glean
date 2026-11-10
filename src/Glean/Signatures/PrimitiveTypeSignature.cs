@@ -35,14 +35,17 @@ public sealed class PrimitiveTypeSignature : TypeSignature
         return _cache.GetOrAdd(typeCode, static tc => new PrimitiveTypeSignature(tc));
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.Primitive;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => TypeCode switch
     {
         PrimitiveTypeCode.Object or PrimitiveTypeCode.String => false,
         _ => true
     };
 
+    /// <summary>Checks the primitive's System namespace and type name; <paramref name="scope"/> is ignored.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
@@ -74,17 +77,21 @@ public sealed class PrimitiveTypeSignature : TypeSignature
         };
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
         => (other is PrimitiveTypeSignature p) && (p.TypeCode == TypeCode);
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitPrimitive(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, TypeCode);
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         sb.Append(TypeCode switch

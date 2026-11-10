@@ -73,10 +73,13 @@ public sealed class TypeReferenceSignature : TypeSignature
         _resolutionScope = typeRef.ResolutionScope;
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.TypeReference;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => null; // Cannot determine without external resolution
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
@@ -128,6 +131,7 @@ public sealed class TypeReferenceSignature : TypeSignature
         }
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
     {
         if (other is not TypeReferenceSignature r) { return false; }
@@ -141,12 +145,14 @@ public sealed class TypeReferenceSignature : TypeSignature
                (ResolutionScopeName == r.ResolutionScopeName);
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitTypeReference(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var typeRef = _reader.GetTypeReference(_handle);
@@ -156,6 +162,7 @@ public sealed class TypeReferenceSignature : TypeSignature
             ResolutionScopeName);
     }
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         var typeRef = _reader.GetTypeReference(_handle);

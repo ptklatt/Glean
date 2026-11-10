@@ -20,6 +20,7 @@ namespace Glean.Contexts;
 /// <remarks>
 /// This is the primary fast tier method API. Use the context members for common metadata
 /// queries, and drop to <see cref="Definition"/> or <see cref="Reader"/> for raw System.Reflection.Metadata access.
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
 /// </remarks>
 public readonly struct MethodContext : IEquatable<MethodContext>
 {
@@ -53,10 +54,15 @@ public readonly struct MethodContext : IEquatable<MethodContext>
         _definition = definition;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public MethodDefinitionHandle Handle => _handle;
+    /// <summary>Gets the underlying metadata definition.</summary>
     public MethodDefinition Definition => _definition;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

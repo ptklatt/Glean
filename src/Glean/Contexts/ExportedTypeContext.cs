@@ -9,12 +9,18 @@ namespace Glean.Contexts;
 /// <summary>
 /// Zero allocation context for ExportedType.
 /// </summary>
+/// <remarks>
+/// This context borrows its reader. Keep the reader's owner alive while accessing metadata.
+/// </remarks>
 public readonly struct ExportedTypeContext : IEquatable<ExportedTypeContext>
 {
     private readonly MetadataReader _reader;
     private readonly ExportedTypeHandle _handle;
     private readonly ExportedType _exportedType;
 
+    /// <summary>Creates a context over the specified metadata reader and row handle.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is nil.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ExportedTypeContext Create(MetadataReader reader, ExportedTypeHandle handle)
     {
@@ -31,10 +37,15 @@ public readonly struct ExportedTypeContext : IEquatable<ExportedTypeContext>
         _exportedType = exportedType;
     }
 
+    /// <summary>Gets the row handle within this context's reader.</summary>
     public ExportedTypeHandle Handle => _handle;
+    /// <summary>Gets the underlying exported type row.</summary>
     public ExportedType ExportedType => _exportedType;
+    /// <summary>Gets the borrowed reader that contains this context's metadata.</summary>
     public MetadataReader Reader => _reader;
 
+    /// <summary>Checks for a reader and a row handle that is not nil.</summary>
+    /// <remarks>This does not validate the metadata or check whether its owner has been disposed.</remarks>
     public bool IsValid
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -140,27 +151,32 @@ public readonly struct ExportedTypeContext : IEquatable<ExportedTypeContext>
         return _reader.StringComparer.Equals(_exportedType.Namespace, ns);
     }
 
+    /// <summary>Checks whether both contexts refer to the same reader and row handle.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(ExportedTypeContext other)
     {
         return (_handle == other._handle) && ReferenceEquals(_reader, other._reader);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
         return (obj is ExportedTypeContext other) && Equals(other);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         return HashCode.Combine(_reader, _handle);
     }
 
+    /// <summary>Checks whether the contexts refer to the same metadata.</summary>
     public static bool operator ==(ExportedTypeContext left, ExportedTypeContext right)
     {
         return left.Equals(right);
     }
 
+    /// <summary>Checks whether the contexts refer to different metadata.</summary>
     public static bool operator !=(ExportedTypeContext left, ExportedTypeContext right)
     {
         return !left.Equals(right);

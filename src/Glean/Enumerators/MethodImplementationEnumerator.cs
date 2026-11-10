@@ -44,9 +44,11 @@ public struct MethodImplementationEnumerator : IStructEnumerator<Contexts.Method
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext() => _enumerator.MoveNext();
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public MethodImplementationEnumerator GetEnumerator() => this;
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

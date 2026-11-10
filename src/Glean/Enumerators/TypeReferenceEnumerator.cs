@@ -34,18 +34,21 @@ public struct TypeReferenceEnumerator : IStructEnumerator<Contexts.TypeReference
         get => TypeReferenceContext.Create(_reader, _enumerator.Current);
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext()
     {
         return _enumerator.MoveNext();
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TypeReferenceEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

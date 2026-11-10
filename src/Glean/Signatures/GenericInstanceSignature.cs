@@ -28,16 +28,20 @@ public sealed class GenericInstanceSignature : TypeSignature
         Arguments = arguments;
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.GenericInstance;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => GenericType.IsValueType;
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
         return GenericType.Is(ns, name, scope);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
     {
         if (other is not GenericInstanceSignature g)  { return false; }
@@ -50,12 +54,14 @@ public sealed class GenericInstanceSignature : TypeSignature
         return true;
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitGenericInstance(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var hc = new HashCode();
@@ -68,6 +74,7 @@ public sealed class GenericInstanceSignature : TypeSignature
         return hc.ToHashCode();
     }
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         GenericType.FormatTo(sb);

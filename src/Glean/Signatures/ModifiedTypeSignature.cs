@@ -37,16 +37,20 @@ public sealed class ModifiedTypeSignature : TypeSignature
         OptionalModifiers = optionalModifiers;
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.Modified;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => UnmodifiedType.IsValueType;
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
         return UnmodifiedType.Is(ns, name, scope);
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
     {
         if (other is not ModifiedTypeSignature m)                     { return false; }
@@ -66,12 +70,14 @@ public sealed class ModifiedTypeSignature : TypeSignature
         return true;
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitModifiedType(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var hc = new HashCode();
@@ -89,6 +95,7 @@ public sealed class ModifiedTypeSignature : TypeSignature
         return hc.ToHashCode();
     }
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         UnmodifiedType.FormatTo(sb);

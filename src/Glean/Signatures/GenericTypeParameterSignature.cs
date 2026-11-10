@@ -27,27 +27,34 @@ public sealed class GenericTypeParameterSignature : TypeSignature
         Index = index;
     }
 
+    /// <inheritdoc/>
     public override TypeSignatureKind Kind => TypeSignatureKind.GenericTypeParameter;
 
+    /// <inheritdoc/>
     public override bool? IsValueType => null; // Cannot determine without context
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Is(string ns, string name, string? scope = null)
     {
         return false;
     }
 
+    /// <inheritdoc/>
     public override bool Equals(TypeSignature? other)
         => other is GenericTypeParameterSignature g && g.Index == Index;
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override void Accept<TVisitor, TState>(ref TVisitor visitor, TState state)
     {
         visitor.VisitGenericTypeParameter(this, state);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, Index);
 
+    /// <inheritdoc/>
     public override void FormatTo(StringBuilder sb)
     {
         sb.Append('!');

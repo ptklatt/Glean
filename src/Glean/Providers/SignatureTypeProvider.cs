@@ -27,21 +27,25 @@ public sealed class SignatureTypeProvider : ISignatureTypeProvider<TypeSignature
 
     private SignatureTypeProvider() { }
 
+    /// <inheritdoc/>
     public TypeSignature GetPrimitiveType(PrimitiveTypeCode typeCode)
     {
         return PrimitiveTypeSignature.Get(typeCode);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
     {
         return new TypeDefinitionSignature(reader, handle);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind)
     {
         return new TypeReferenceSignature(reader, handle);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetTypeFromSpecification(MetadataReader reader, SignatureDecodeContext genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
     {
         // Recurse: decode the type specification
@@ -49,31 +53,37 @@ public sealed class SignatureTypeProvider : ISignatureTypeProvider<TypeSignature
         return typeSpec.DecodeSignature(this, genericContext);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetSZArrayType(TypeSignature elementType)
     {
         return new SZArraySignature(elementType);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetArrayType(TypeSignature elementType, ArrayShape shape)
     {
         return new ArraySignature(elementType, shape);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetByReferenceType(TypeSignature elementType)
     {
         return new ByRefSignature(elementType);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetPointerType(TypeSignature elementType)
     {
         return new PointerSignature(elementType);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetGenericInstantiation(TypeSignature genericType, ImmutableArray<TypeSignature> typeArguments)
     {
         return new GenericInstanceSignature(genericType, typeArguments);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetGenericTypeParameter(SignatureDecodeContext genericContext, int index)
     {
         // If context has type arguments, substitute
@@ -85,6 +95,7 @@ public sealed class SignatureTypeProvider : ISignatureTypeProvider<TypeSignature
         return new GenericTypeParameterSignature(index);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetGenericMethodParameter(SignatureDecodeContext genericContext, int index)
     {
         // If context has method arguments, substitute
@@ -96,11 +107,13 @@ public sealed class SignatureTypeProvider : ISignatureTypeProvider<TypeSignature
         return new GenericMethodParameterSignature(index);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetPinnedType(TypeSignature elementType)
     {
         return new PinnedTypeSignature(elementType);
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetModifiedType(TypeSignature modifier, TypeSignature unmodifiedType, bool isRequired)
     {
         TypeSignature result;
@@ -134,11 +147,13 @@ public sealed class SignatureTypeProvider : ISignatureTypeProvider<TypeSignature
         return result;
     }
 
+    /// <inheritdoc/>
     public TypeSignature GetFunctionPointerType(MethodSignature<TypeSignature> signature)
     {
         return new FunctionPointerSignature(signature);
     }
 
+    /// <summary>Returns the shared vararg sentinel signature.</summary>
     public TypeSignature GetSentinelType()
     {
         return SentinelTypeSignature.Instance;

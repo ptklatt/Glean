@@ -25,24 +25,28 @@ public struct CustomAttributeEnumerator : IStructEnumerator<CustomAttributeConte
         _enumerator = collection.GetEnumerator();
     }
 
+    /// <inheritdoc/>
     public CustomAttributeContext Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => CustomAttributeContext.UnsafeCreate(_reader, _enumerator.Current);
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext()
     {
         return _enumerator.MoveNext();
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public CustomAttributeEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }

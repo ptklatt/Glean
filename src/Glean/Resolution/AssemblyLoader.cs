@@ -26,6 +26,7 @@ public enum AssemblyDependencyLoadFailureKind
 /// </summary>
 public readonly struct AssemblyDependencyLoadFailure
 {
+    /// <summary>Creates a dependency load failure record.</summary>
     public AssemblyDependencyLoadFailure(string assemblySimpleName, AssemblyDependencyLoadFailureKind kind, string? path)
     {
         AssemblySimpleName = assemblySimpleName;

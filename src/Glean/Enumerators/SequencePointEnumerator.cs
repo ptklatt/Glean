@@ -23,24 +23,28 @@ public struct SequencePointEnumerator : IStructEnumerator<SequencePoint>
         _inner = inner;
     }
 
+    /// <inheritdoc/>
     public SequencePoint Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _inner.Current;
     }
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool MoveNext()
     {
         return _inner.MoveNext();
     }
 
+    /// <summary>Returns a copy of this enumerator at its current position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SequencePointEnumerator GetEnumerator()
     {
         return this;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
     }
