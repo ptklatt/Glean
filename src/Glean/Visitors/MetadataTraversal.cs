@@ -679,7 +679,7 @@ public static class MetadataTraversal
 
         foreach (var method in type.EnumerateMethods())
         {
-            TraverseMethodMethodsOnly(ref visitor, in method);
+            TraverseMethod(ref visitor, in method);
         }
 
         foreach (var nestedType in type.EnumerateNestedTypes())
@@ -709,25 +709,6 @@ public static class MetadataTraversal
     }
 
     private static void TraverseMethod<TVisitor>(ref TVisitor visitor, in MethodContext method)
-        where TVisitor : struct, IMetadataVisitor
-    {
-        visitor.VisitMethod(in method);
-        TraverseCustomAttributes(method.EnumerateCustomAttributes(), ref visitor);
-
-        foreach (var genericParameter in method.EnumerateGenericParameters())
-        {
-            visitor.VisitGenericParameter(in genericParameter);
-            TraverseCustomAttributes(genericParameter.EnumerateCustomAttributes(), ref visitor);
-        }
-
-        foreach (var parameter in method.EnumerateParameters())
-        {
-            visitor.VisitParameter(in parameter);
-            TraverseCustomAttributes(parameter.EnumerateCustomAttributes(), ref visitor);
-        }
-    }
-
-    private static void TraverseMethodMethodsOnly<TVisitor>(ref TVisitor visitor, in MethodContext method)
         where TVisitor : struct, IMetadataVisitor
     {
         visitor.VisitMethod(in method);
