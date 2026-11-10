@@ -55,15 +55,15 @@ Metadata traversal allocation checks live in
 and local base traversal is covered by
 [ResolutionExtensionTests.cs](../test/Glean.Tests/Resolution/ResolutionExtensionTests.cs).
 
-They currently verify:
+The checks cover:
 
 - fast tier name checks stay near raw SRM allocation behavior
 - fast tier type enumeration stays near raw SRM allocation behavior
 - rich formatting helpers allocate as documented
 - custom attribute decoding allocates as documented
 - signature visitor dispatch with a struct visitor stays allocation free
-- all seven metadata traversal profiles stay allocation free after warmup with
-  struct visitors and value state
+- a zero-allocation target for all seven warmed metadata traversal profiles
+  with struct visitors and value state
 - long local base chains remain complete without allocating a visited collection
 - successful warm cached type resolution stays allocation free on repeated lookups
 - successful warm cached member resolution with `MemberResolutionIndex` stays
@@ -75,6 +75,11 @@ They currently verify:
 The tests exclude fixture creation, reader setup, delegate construction, and
 cache warmup from the measured interval. They use thread-local allocation counts;
 some checks allow a small fixed tolerance across thousands of operations.
+
+Traversal tests have intermittently reported allocations after warmup on .NET 8
+when visiting constant/debug tables with value state or method attributes without
+it. The cause is unresolved. Allocation results describe the tested workloads and
+runtimes.
 
 Custom attribute parent reads can allocate during early calls on .NET 8, in both
 raw SRM and Glean. On the tested .NET 8 runtimes, these allocations disappear
