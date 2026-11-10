@@ -6,6 +6,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a v* tag after validation and environment approval
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,9 +40,15 @@ jobs:
             9.0.x
 
       - name: Compute version
+        env:
+          PUBLISH_REQUESTED: ${{ inputs.publish || false }}
         run: |
           $prefix = ([xml](Get-Content Directory.Build.props -Raw)).Project.PropertyGroup.VersionPrefix
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME.StartsWith('v')) {
+          $isVersionTag = $env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME.StartsWith('v')
+          if ($env:PUBLISH_REQUESTED -eq 'true' -and -not $isVersionTag) {
+            throw 'Publishing requires a v* tag.'
+          }
+          if ($isVersionTag) {
             $version = $env:GITHUB_REF_NAME.Substring(1)
           } else {
             $version = "$prefix-alpha.$env:GITHUB_RUN_NUMBER"
@@ -76,3 +87,49 @@ jobs:
             artifacts/packages/*.nupkg
             artifacts/packages/*.snupkg
           if-no-files-found: error
+
+  publish:
+    needs: build-test-package
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    environment: nuget
+    concurrency:
+      group: nuget-${{ github.ref }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Compute version
+        run: '"PACKAGE_VERSION=$($env:GITHUB_REF_NAME.Substring(1))" >> $env:GITHUB_ENV'
+
+      - name: Download validated packages
+        uses: actions/download-artifact@v8
+        with:
+          name: glean-Linux-${{ env.PACKAGE_VERSION }}
+          path: artifacts/packages
+          digest-mismatch: error
+
+      - name: Publish packages to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
+            throw 'Configure NUGET_API_KEY in the nuget environment.'
+          }
+          foreach ($extension in @('nupkg', 'snupkg')) {
+            if (-not (Test-Path "artifacts/packages/Glean.$env:PACKAGE_VERSION.$extension" -PathType Leaf)) {
+              throw "Missing validated $extension package."
+            }
+          }
+          dotnet nuget push "artifacts/packages/Glean.$env:PACKAGE_VERSION.nupkg" --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json

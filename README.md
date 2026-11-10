@@ -32,7 +32,12 @@ dotnet run --project eng/VerifyPackage -c Release -- artifacts/packages 0.1.0-al
 
 Use the full commit hash from `git rev-parse HEAD` for `<git-revision>`. CI runs the
 same checks on Ubuntu and Windows. Tag builds upload package artifacts; publishing
-requires a separate protected release job and is not performed by this workflow.
+requires a manual run of `ci` on a `v*` tag with `publish` selected. After both
+platforms pass, the publish job uses that run's Linux packages without rebuilding.
+
+Before publishing, configure the GitHub `nuget` environment with required
+reviewers, deployment access restricted to `v*` tags, and a `NUGET_API_KEY` secret
+scoped to Glean. Approve the publish job only for the intended version.
 
 ## Choose a Lane
 
