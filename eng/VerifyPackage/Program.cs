@@ -48,42 +48,13 @@ try
             new XElement("ImplicitUsings", "enable"), new XElement("Nullable", "enable")),
         new XElement("ItemGroup", new XElement("PackageReference", new XAttribute("Include", "Glean"),
             new XAttribute("Version", $"[{version}]"))))).Save(project);
-    File.WriteAllText(Path.Combine(scratch, "Consumer.cs"), """
-        using System.Reflection;
-        using System.Reflection.Metadata;
-        using System.Runtime.InteropServices;
-        using System.Runtime.Versioning;
-
-        using Glean;
-
-        int expectedRuntime = int.Parse(args[0]);
-        string expectedAsset = ".NETCoreApp,Version=v" + args[1] + ".0";
-        var assembly = typeof(AssemblyScope).Assembly;
-        if (Environment.Version.Major != expectedRuntime)
-        {
-            throw new InvalidOperationException("Consumer ran on the wrong runtime.");
-        }
-        if (assembly.GetCustomAttribute<TargetFrameworkAttribute>()!.FrameworkName != expectedAsset)
-        {
-            throw new InvalidOperationException("Consumer loaded the wrong Glean target.");
-        }
-        using var scope = AssemblyScope.Open(assembly.Location);
-        int count = 0;
-        bool foundScope = false;
-        foreach (var type in scope.Context.EnumerateTypes())
-        {
-            if (type.IsPublic)
-            {
-                count++;
-                foundScope |= type.NameIs("AssemblyScope");
-            }
-        }
-        if ((count == 0) || !foundScope)
-        {
-            throw new InvalidOperationException("Package traversal did not find its public entry point.");
-        }
-        Console.WriteLine($"ConsumerRuntime={RuntimeInformation.FrameworkDescription} GleanTarget={expectedAsset} PublicTypes={count} SRMPath={typeof(MetadataReader).Assembly.Location}");
-        """);
+    foreach (string sourceName in new[] { "Consumer.cs", "IrType.cs", "IrTypeProvider.cs" })
+    {
+        using var source = typeof(Program).Assembly.GetManifestResourceStream(sourceName)
+            ?? throw new InvalidDataException($"Missing consumer source: {sourceName}");
+        using var reader = new StreamReader(source);
+        File.WriteAllText(Path.Combine(scratch, sourceName), reader.ReadToEnd());
+    }
     Run("restore", project, "--configfile", configuration, "--packages", Path.Combine(scratch, "packages"), "--no-cache", "-p:NuGetAudit=false");
     Run("build", project, "-c", "Release", "--no-restore", "--nologo");
     using var assets = JsonDocument.Parse(File.ReadAllText(Path.Combine(scratch, "obj", "project.assets.json")));
@@ -94,10 +65,12 @@ try
         Require(dependency.GetProperty("type").GetString() == "package", "Consumer did not resolve Glean as a package.");
         Require(dependency.GetProperty("compile").TryGetProperty($"lib/{assetFramework}/Glean.dll", out _), "Consumer selected the wrong framework asset.");
         byte[] restored = File.ReadAllBytes(Path.Combine(scratch, "packages", "glean", version, "lib", assetFramework, "Glean.dll"));
-        Require(SHA256.HashData(restored).SequenceEqual(SHA256.HashData(Read(package, $"lib/{assetFramework}/Glean.dll"))), "Consumer assembly differs from the produced package.");
-        Run("exec", Path.Combine(scratch, "bin", "Release", framework, "Consumer.dll"), framework[3..].Split('.')[0], assetFramework[3..].Split('.')[0]);
+        byte[] packageHash = SHA256.HashData(Read(package, $"lib/{assetFramework}/Glean.dll"));
+        Require(SHA256.HashData(restored).SequenceEqual(packageHash), "Consumer assembly differs from the produced package.");
+        Run("exec", Path.Combine(scratch, "bin", "Release", framework, "Consumer.dll"), framework[3..].Split('.')[0],
+            assetFramework[3..].Split('.')[0], Convert.ToHexString(packageHash));
     }
-    Console.WriteLine("Verified both package assets and isolated .NET 8, .NET 9 and .NET 10 consumers, including runtime traversal.");
+    Console.WriteLine("Verified both package assets and isolated .NET 8, .NET 9 and .NET 10 consumers: traversal, closure resolution, parameter mapping and custom IR.");
     verified = true;
 }
 finally

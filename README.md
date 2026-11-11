@@ -1,5 +1,3 @@
-## This library is in an early alpha/design state. API/breaking changes are most likely to still occur.
-
 # Glean
 
 Glean is a usability layer over `System.Reflection.Metadata` that keeps traversal costs explicit.
@@ -21,13 +19,13 @@ dotnet test test/Glean.Tests/Glean.Tests.csproj -c Release --no-build
 dotnet pack src/Glean/Glean.csproj -c Release -o artifacts/packages
 ```
 
-Local packages default to `0.1.0-alpha.1`. The package includes XML documentation,
+Local packages default to `1.0.0-rc.1`. The package includes XML documentation,
 the MIT license and this README; the symbol package includes portable PDBs with
 SourceLink and embedded library sources. To inspect the packages and compile fresh
 package consumers on all three runtimes, run from the repository root:
 
 ```sh
-dotnet run --project eng/VerifyPackage -c Release -- artifacts/packages 0.1.0-alpha.1 <git-revision>
+dotnet run --project eng/VerifyPackage -c Release -- artifacts/packages 1.0.0-rc.1 <git-revision>
 ```
 
 Use the full commit hash from `git rev-parse HEAD` for `<git-revision>`. CI runs the
@@ -51,8 +49,7 @@ want:
   `ITypeSignatureVisitor<TState>`, `CustomAttributeDecoder`, and formatting
   helpers that materialize richer object graphs.
 - Cross assembly resolution: `AssemblyClosure` and `AssemblySet` for resolving
-  type and member references across a dependency closure. This API is preview
-  while the library is in alpha.
+  type and member references across a dependency closure.
 
 Raw `System.Reflection.Metadata` is always still here:
 

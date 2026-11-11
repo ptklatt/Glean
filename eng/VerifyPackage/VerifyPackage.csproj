@@ -6,4 +6,10 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Consumer.cs" />
+    <EmbeddedResource Include="Consumer.cs" LogicalName="Consumer.cs" />
+    <EmbeddedResource Include="../../samples/CustomIrSample/IrType.cs" LogicalName="IrType.cs" />
+    <EmbeddedResource Include="../../samples/CustomIrSample/IrTypeProvider.cs" LogicalName="IrTypeProvider.cs" />
+  </ItemGroup>
 </Project>
