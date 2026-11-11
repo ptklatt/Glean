@@ -88,8 +88,55 @@ jobs:
             artifacts/packages/*.snupkg
           if-no-files-found: error
 
-  publish:
+  verify-release-package:
     needs: build-test-package
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Preserve Linux package text bytes
+        run: git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Compute version
+        run: |
+          $prefix = ([xml](Get-Content Directory.Build.props -Raw)).Project.PropertyGroup.VersionPrefix
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME.StartsWith('v')) {
+            $version = $env:GITHUB_REF_NAME.Substring(1)
+          } else {
+            $version = "$prefix-alpha.$env:GITHUB_RUN_NUMBER"
+          }
+          "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Download Linux packages
+        uses: actions/download-artifact@v8
+        with:
+          name: glean-Linux-${{ env.PACKAGE_VERSION }}
+          path: artifacts/packages
+          digest-mismatch: error
+
+      - name: Restore
+        run: dotnet restore Glean.slnx
+
+      - name: Build package verifier
+        run: dotnet build eng/VerifyPackage -c Release --no-restore --nologo -warnaserror -p:Version=$env:PACKAGE_VERSION
+
+      - name: Inspect Linux packages and run isolated Windows consumers
+        run: dotnet run --project eng/VerifyPackage -c Release --no-build -- artifacts/packages $env:PACKAGE_VERSION $env:GITHUB_SHA
+
+  publish:
+    needs: verify-release-package
     if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
     environment: nuget
