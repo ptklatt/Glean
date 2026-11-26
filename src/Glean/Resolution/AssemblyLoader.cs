@@ -487,26 +487,35 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
     {
         DependencyLoadResult lastFailure = default;
         DependencyLoadResult compatibleCandidate = default;
+        int compatibleSearchPathIndex = int.MaxValue;
 
-        foreach (var candidatePath in EnumerateCandidatePaths(requestedIdentity.Name, searchPaths))
+        int probePasses = OperatingSystem.IsWindows() ? 1 : 2;
+        for (int pass = 0; pass < probePasses; pass++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var candidate = await TryLoadCandidateAsync(candidatePath, cancellationToken).ConfigureAwait(false);
-            var loadResult = ValidateDependencyCandidate(candidate, requestedIdentity);
-            if (loadResult.IsSuccess)
+            var paths = pass == 0
+                ? EnumerateCandidatePaths(requestedIdentity.Name, searchPaths)
+                : EnumerateCaseVariantCandidatePaths(requestedIdentity.Name, searchPaths, cancellationToken);
+            foreach (var (candidatePath, searchPathIndex) in paths)
             {
-                return loadResult;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            if (loadResult.FailureKind == AssemblyDependencyLoadFailureKind.IdentityMismatch)
-            {
-                CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
-            }
+                var candidate = await TryLoadCandidateAsync(candidatePath, cancellationToken).ConfigureAwait(false);
+                var loadResult = ValidateDependencyCandidate(candidate, requestedIdentity);
+                if (loadResult.IsSuccess)
+                {
+                    return loadResult;
+                }
 
-            if (loadResult.HasFailure)
-            {
-                lastFailure = loadResult;
+                if (loadResult.FailureKind == AssemblyDependencyLoadFailureKind.IdentityMismatch)
+                {
+                    CaptureCompatibleCandidate(candidate, requestedIdentity, searchPathIndex,
+                        ref compatibleCandidate, ref compatibleSearchPathIndex);
+                }
+
+                if (loadResult.HasFailure)
+                {
+                    lastFailure = loadResult;
+                }
             }
         }
 
@@ -527,26 +536,35 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
     {
         DependencyLoadResult lastFailure = default;
         DependencyLoadResult compatibleCandidate = default;
+        int compatibleSearchPathIndex = int.MaxValue;
 
-        foreach (var candidatePath in EnumerateCandidatePaths(requestedIdentity.Name, searchPaths))
+        int probePasses = OperatingSystem.IsWindows() ? 1 : 2;
+        for (int pass = 0; pass < probePasses; pass++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var candidate = TryLoadCandidate(candidatePath, cancellationToken);
-            var loadResult = ValidateDependencyCandidate(candidate, requestedIdentity);
-            if (loadResult.IsSuccess)
+            var paths = pass == 0
+                ? EnumerateCandidatePaths(requestedIdentity.Name, searchPaths)
+                : EnumerateCaseVariantCandidatePaths(requestedIdentity.Name, searchPaths, cancellationToken);
+            foreach (var (candidatePath, searchPathIndex) in paths)
             {
-                return loadResult;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            if (loadResult.FailureKind == AssemblyDependencyLoadFailureKind.IdentityMismatch)
-            {
-                CaptureCompatibleCandidate(candidate, requestedIdentity, ref compatibleCandidate);
-            }
+                var candidate = TryLoadCandidate(candidatePath, cancellationToken);
+                var loadResult = ValidateDependencyCandidate(candidate, requestedIdentity);
+                if (loadResult.IsSuccess)
+                {
+                    return loadResult;
+                }
 
-            if (loadResult.HasFailure)
-            {
-                lastFailure = loadResult;
+                if (loadResult.FailureKind == AssemblyDependencyLoadFailureKind.IdentityMismatch)
+                {
+                    CaptureCompatibleCandidate(candidate, requestedIdentity, searchPathIndex,
+                        ref compatibleCandidate, ref compatibleSearchPathIndex);
+                }
+
+                if (loadResult.HasFailure)
+                {
+                    lastFailure = loadResult;
+                }
             }
         }
 
@@ -563,13 +581,16 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
     private void CaptureCompatibleCandidate(
         DependencyLoadResult candidate,
         AssemblyIdentityKey requestedIdentity,
-        ref DependencyLoadResult compatibleCandidate)
+        int searchPathIndex,
+        ref DependencyLoadResult compatibleCandidate,
+        ref int compatibleSearchPathIndex)
     {
         if ((_bindingPolicy == AssemblyBindingPolicy.ExactThenCompatible) &&
-            (!compatibleCandidate.IsSuccess) && (candidate.IsSuccess) && (candidate.Reader!.IsAssembly) &&
+            (searchPathIndex < compatibleSearchPathIndex) && (candidate.IsSuccess) && (candidate.Reader!.IsAssembly) &&
             requestedIdentity.MatchesExceptVersion(AssemblyIdentityKey.FromDefinition(candidate.Reader.GetAssemblyDefinition(), candidate.Reader)))
         {
             compatibleCandidate = candidate;
+            compatibleSearchPathIndex = searchPathIndex;
         }
     }
 
@@ -660,28 +681,76 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         }
     }
 
-    private IEnumerable<string> EnumerateCandidatePaths(string assemblyName, IReadOnlyList<string> searchPaths)
+    private IEnumerable<(string Path, int SearchPathIndex)> EnumerateCandidatePaths(
+        string assemblyName, IReadOnlyList<string> searchPaths)
     {
-        foreach (var searchPath in searchPaths)
+        for (int searchPathIndex = 0; searchPathIndex < searchPaths.Count; searchPathIndex++)
         {
-            yield return Path.Combine(searchPath, assemblyName + ".dll");
-            yield return Path.Combine(searchPath, assemblyName + ".exe");
+            var searchPath = searchPaths[searchPathIndex];
+            yield return (Path.Combine(searchPath, assemblyName + ".dll"), searchPathIndex);
+            yield return (Path.Combine(searchPath, assemblyName + ".exe"), searchPathIndex);
 
             if (_targetFrameworkMoniker == null)
             {
                 continue;
             }
 
-            yield return Path.Combine(searchPath, "lib", _targetFrameworkMoniker, assemblyName + ".dll");
-            yield return Path.Combine(searchPath, "ref", _targetFrameworkMoniker, assemblyName + ".dll");
+            yield return (Path.Combine(searchPath, "lib", _targetFrameworkMoniker, assemblyName + ".dll"), searchPathIndex);
+            yield return (Path.Combine(searchPath, "ref", _targetFrameworkMoniker, assemblyName + ".dll"), searchPathIndex);
 
             var runtimesDirectory = Path.Combine(searchPath, "runtimes");
             if (Directory.Exists(runtimesDirectory))
             {
                 foreach (var runtimeDirectory in Directory.EnumerateDirectories(runtimesDirectory))
                 {
-                    yield return Path.Combine(runtimeDirectory, "lib", _targetFrameworkMoniker, assemblyName + ".dll");
+                    yield return (Path.Combine(runtimeDirectory, "lib", _targetFrameworkMoniker, assemblyName + ".dll"), searchPathIndex);
                 }
+            }
+        }
+    }
+
+    private IEnumerable<(string Path, int SearchPathIndex)> EnumerateCaseVariantCandidatePaths(
+        string assemblyName,
+        IReadOnlyList<string> searchPaths,
+        CancellationToken cancellationToken)
+    {
+        // Only scan directories after exact filename probing has found no exact assembly identity.
+        foreach (var (exactPath, searchPathIndex) in EnumerateCandidatePaths(assemblyName, searchPaths))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var directory = Path.GetDirectoryName(exactPath)!;
+            if (!Directory.Exists(directory))
+            {
+                continue;
+            }
+
+            var name = Path.GetFileName(exactPath);
+            var matches = new List<string>();
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(directory))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!string.Equals(path, exactPath, FileSystemPathComparison.Comparison) &&
+                        string.Equals(Path.GetFileName(path), name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        matches.Add(path);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            matches.Sort(StringComparer.Ordinal);
+            foreach (var path in matches)
+            {
+                yield return (path, searchPathIndex);
             }
         }
     }

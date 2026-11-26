@@ -117,6 +117,11 @@ path order and changes only the version. Inspect `closure.BindingSubstitutions`
 for the requested identity, resolved identity, and file path. See the
 [binding recipe](https://github.com/ptklatt/glean/blob/master/docs/recipes.md#configure-assembly-binding) for an example.
 
+On case-sensitive systems, assembly probing tries exact filenames first, then
+filename matches that differ only in case. Case variants preserve the probing
+directory and extension order; variants of each candidate filename use ordinal
+order. Assembly identity checks and filesystem path comparison still apply.
+
 ## Cost Model
 
 Context enumerators, identity checks such as `NameIs` and `NamespaceIs`, and
