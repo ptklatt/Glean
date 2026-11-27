@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 
 namespace Glean.Resolution;
 
@@ -52,6 +54,17 @@ public sealed class DirectoryAssemblyResolver : IAssemblyReferenceResolver, IMod
 
     /// <summary>Gets the assembly identity matching policy used by this resolver.</summary>
     public AssemblyBindingPolicy BindingPolicy => _loader.BindingPolicy;
+
+    /// <summary>Gets the borrowed PE reader for metadata loaded by this resolver.</summary>
+    /// <returns>False if <paramref name="reader"/> was not loaded by this resolver.</returns>
+    /// <remarks>Do not dispose the returned reader. It and spans from it require this resolver to remain alive.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ObjectDisposedException">This resolver has been disposed.</exception>
+    public bool TryGetPeReader(MetadataReader reader, [NotNullWhen(true)] out PEReader? peReader)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _loader.TryGetPeReader(reader, out peReader);
+    }
 
     string? IAssemblyPathProvider.GetAssemblyPath(MetadataReader reader) => _loader.GetAssemblyPath(reader);
 

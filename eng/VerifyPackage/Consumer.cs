@@ -8,6 +8,7 @@ using CustomIrSample;
 
 using Glean;
 using Glean.Contexts;
+using Glean.Extensions;
 using Glean.Providers;
 using Glean.Resolution;
 
@@ -40,6 +41,26 @@ using var closure = AssemblyClosure.Load(consumerPath, new AssemblyLoadOptions
     SearchPaths = new[] { Path.GetDirectoryName(consumerPath)!, Path.GetDirectoryName(typeof(object).Assembly.Location)! },
     BindingPolicy = AssemblyBindingPolicy.ExactThenCompatible
 }).ThrowIfPartial();
+
+Require(closure.TryGetPeReader(closure.EntryReader, out var entryImage) && ReferenceEquals(entryImage, closure.EntryPeReader),
+    "Closure did not return its borrowed entry PE reader.");
+Require(closure.TryGetManagedEntryPoint(out var entryMethod) && ReferenceEquals(entryMethod.Reader, closure.EntryReader),
+    "Consumer entry point did not retain its owning metadata reader.");
+Require(!entryMethod.Definition.GetILSpan(entryImage!).IsEmpty, "Consumer entry point IL was not available.");
+
+using var entryScope = AssemblyScope.Open(consumerPath);
+Require(entryScope.TryGetManagedEntryPoint(out var scopedMethod) && ReferenceEquals(scopedMethod.Reader, entryScope.Reader),
+    "Scoped entry point did not retain its owning reader.");
+using var loader = new AssemblyLoader();
+var loadedReader = loader.LoadFile(consumerPath);
+Require(loader.TryGetPeReader(loadedReader, out var loadedImage) && loadedImage.HasMetadata,
+    "Loader did not expose its borrowed PE image.");
+using var resolver = new DirectoryAssemblyResolver(Path.GetDirectoryName(typeof(object).Assembly.Location)!);
+var runtimeReference = closure.EntryReader.AssemblyReferences.Single(handle =>
+    closure.EntryReader.GetString(closure.EntryReader.GetAssemblyReference(handle).Name) == "System.Runtime");
+Require(resolver.TryResolve(runtimeReference, closure.EntryReader, out var runtimeReader) &&
+    resolver.TryGetPeReader(runtimeReader!, out var runtimeImage) && runtimeImage.HasMetadata,
+    "Directory resolver did not expose its resolved PE image.");
 
 bool resolvedDisposable = false;
 foreach (var reference in closure.EntryContext.Module.EnumerateTypeReferences())
@@ -92,7 +113,7 @@ Require(custom.ParameterTypes[3] is IrType.Named named &&
     (named.Failure == ResolutionFailureReason.None),
     "Custom IR did not retain and resolve the named parameter type.");
 
-Console.WriteLine($"ConsumerRuntime={RuntimeInformation.FrameworkDescription} GleanTarget={expectedAsset} PublicTypes={count} SRMPath={typeof(MetadataReader).Assembly.Location} Checks=traversal,closure,parameters,custom-ir");
+Console.WriteLine($"ConsumerRuntime={RuntimeInformation.FrameworkDescription} GleanTarget={expectedAsset} PublicTypes={count} SRMPath={typeof(MetadataReader).Assembly.Location} Checks=traversal,closure,parameters,custom-ir,pe-access,entry-point");
 
 static void Require(bool condition, string message)
 {

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
@@ -59,9 +60,9 @@ public readonly struct AssemblyDependencyLoadFailure
 [EditorBrowsable(EditorBrowsableState.Advanced)]
 public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver, IModuleNameResolver, IAssemblyPathProvider, IDisposable
 {
-    private readonly List<PEReader> _ownedPEReaders = new();
     private readonly Dictionary<string, MetadataReader> _loadedReaders = new(FileSystemPathComparison.Comparer);
-    private readonly Dictionary<MetadataReader, string> _pathByReader = new(ReferenceEqualityComparer<MetadataReader>.Instance);
+    private readonly Dictionary<MetadataReader, (string Path, PEReader PeReader)> _filesByReader =
+        new(ReferenceEqualityComparer<MetadataReader>.Instance);
     private readonly Dictionary<MetadataReader, Dictionary<string, MetadataReader>> _moduleCacheByRequestingReader =
         new(ReferenceEqualityComparer<MetadataReader>.Instance);
     private readonly List<string> _searchPaths = new();
@@ -147,6 +148,27 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
     /// </summary>
     public IReadOnlyDictionary<string, MetadataReader> LoadedAssemblies => _loadedReaders;
 
+    /// <summary>Gets the borrowed PE reader for metadata loaded by this instance.</summary>
+    /// <returns>False if <paramref name="reader"/> was not loaded by this instance.</returns>
+    /// <remarks>Do not dispose the returned reader. It and spans from it require this loader to remain alive.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ObjectDisposedException">This loader has been disposed.</exception>
+    public bool TryGetPeReader(MetadataReader reader, [NotNullWhen(true)] out PEReader? peReader)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_filesByReader.TryGetValue(reader, out var file))
+        {
+            peReader = file.PeReader;
+            return true;
+        }
+
+        peReader = null;
+        return false;
+    }
+
+    internal PEReader GetOwnedPeReader(MetadataReader reader) => _filesByReader[reader].PeReader;
+
     /// <summary>
     /// Loads a single assembly from a file path.
     /// </summary>
@@ -220,9 +242,8 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
             }
 
             var reader = peReader.GetMetadataReader();
-            _ownedPEReaders.Add(peReader);
+            _filesByReader.Add(reader, (fullPath, peReader));
             _loadedReaders[fullPath] = reader;
-            _pathByReader[reader] = fullPath;
             return reader;
         }
         catch
@@ -251,7 +272,7 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
 
     internal string? GetAssemblyPath(MetadataReader reader)
     {
-        return _pathByReader.TryGetValue(reader, out var path) ? path : null;
+        return _filesByReader.TryGetValue(reader, out var file) ? file.Path : null;
     }
 
     /// <summary>
@@ -790,9 +811,9 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
         IReadOnlyList<string> searchPaths)
     {
         string? requestingDirectory = null;
-        if (_pathByReader.TryGetValue(requestingReader, out var requestingPath))
+        if (_filesByReader.TryGetValue(requestingReader, out var file))
         {
-            requestingDirectory = Path.GetDirectoryName(requestingPath);
+            requestingDirectory = Path.GetDirectoryName(file.Path);
             if (!string.IsNullOrEmpty(requestingDirectory))
             {
                 requestingDirectory = FileSystemPathComparison.NormalizeDirectory(requestingDirectory);
@@ -846,14 +867,13 @@ public sealed class AssemblyLoader : IAssemblyReferenceResolver, IModuleResolver
     {
         if (_disposed) { return; }
 
-        foreach (var peReader in _ownedPEReaders)
+        foreach (var file in _filesByReader.Values)
         {
-            peReader.Dispose();
+            file.PeReader.Dispose();
         }
 
-        _ownedPEReaders.Clear();
+        _filesByReader.Clear();
         _loadedReaders.Clear();
-        _pathByReader.Clear();
         _moduleCacheByRequestingReader.Clear();
         _searchPaths.Clear();
         _searchPathSet.Clear();

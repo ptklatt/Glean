@@ -2,6 +2,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
 using Glean.Contexts;
+using Glean.Internal;
 
 namespace Glean;
 
@@ -75,6 +76,16 @@ public sealed class AssemblyScope : IDisposable
     public AssemblyContext Context
     {
         get { ObjectDisposedException.ThrowIf(_disposed, this); return _context; }
+    }
+
+    /// <summary>Gets the local method identified by this image's managed entry point token.</summary>
+    /// <returns>False for absent, native, external module or invalid method tokens.</returns>
+    /// <remarks>The returned context borrows this scope's metadata and is invalid after disposal.</remarks>
+    /// <exception cref="ObjectDisposedException">This scope has been disposed.</exception>
+    public bool TryGetManagedEntryPoint(out MethodContext method)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return ManagedEntryPoint.TryGetMethod(_peReader, _reader, out method);
     }
 
     /// <summary>Releases the memory mapped file handle and all associated resources.</summary>

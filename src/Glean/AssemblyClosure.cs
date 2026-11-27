@@ -1,6 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 
 using Glean.Contexts;
+using Glean.Internal;
 using Glean.Resolution;
 
 namespace Glean;
@@ -124,6 +127,39 @@ public sealed class AssemblyClosure : IDisposable
     public MetadataReader EntryReader
     {
         get { ObjectDisposedException.ThrowIf(_disposed, this); return _entryReader; }
+    }
+
+    /// <summary>Gets the borrowed PE reader for the entry assembly.</summary>
+    /// <remarks>Do not dispose this reader. It and spans from it require this closure to remain alive.</remarks>
+    /// <exception cref="ObjectDisposedException">This closure has been disposed.</exception>
+    public PEReader EntryPeReader
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _loader.GetOwnedPeReader(_entryReader);
+        }
+    }
+
+    /// <summary>Gets the borrowed PE reader for metadata loaded by this closure.</summary>
+    /// <returns>False if <paramref name="reader"/> was not loaded by this closure.</returns>
+    /// <remarks>Do not dispose the returned reader. It and spans from it require this closure to remain alive.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is null.</exception>
+    /// <exception cref="ObjectDisposedException">This closure has been disposed.</exception>
+    public bool TryGetPeReader(MetadataReader reader, [NotNullWhen(true)] out PEReader? peReader)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _loader.TryGetPeReader(reader, out peReader);
+    }
+
+    /// <summary>Gets the local method identified by the entry assembly's managed entry point token.</summary>
+    /// <returns>False for absent, native, external module or invalid method tokens.</returns>
+    /// <remarks>The returned context borrows this closure's metadata and is invalid after disposal.</remarks>
+    /// <exception cref="ObjectDisposedException">This closure has been disposed.</exception>
+    public bool TryGetManagedEntryPoint(out MethodContext method)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return ManagedEntryPoint.TryGetMethod(_loader.GetOwnedPeReader(_entryReader), _entryReader, out method);
     }
 
     /// <summary>

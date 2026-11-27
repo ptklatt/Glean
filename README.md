@@ -124,6 +124,18 @@ order. Assembly identity checks and filesystem path comparison still apply.
 
 ## Cost Model
 
+For IL bytes or CLI headers, reuse `AssemblyScope.PeReader` or
+`AssemblyClosure.EntryPeReader`. A closure, loader or directory resolver can also
+return the borrowed PE reader for one of its metadata readers with
+`TryGetPeReader(reader, out var peReader)`. Keep the owner alive and do not dispose
+borrowed readers.
+
+`AssemblyScope.TryGetManagedEntryPoint` and `AssemblyClosure.TryGetManagedEntryPoint`
+return a method context for a managed entry point in the current image. They return
+false for native or external module entry points and absent or invalid method tokens. Use
+`method.Definition.GetILSpan(peReader)` for borrowed IL bytes, or `DecodeILBytes`
+for an allocated copy.
+
 Context enumerators, identity checks such as `NameIs` and `NamespaceIs`, and
 `MetadataTraversal` use raw metadata without building signature graphs. Struct
 visitors implement every callback explicitly; unused callbacks can have empty bodies.
