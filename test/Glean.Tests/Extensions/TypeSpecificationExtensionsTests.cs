@@ -1,5 +1,7 @@
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using CustomIrSample;
 
 using Xunit;
 
@@ -26,6 +28,56 @@ public class TypeSpecificationExtensionsTests
 
         var argument = Assert.IsType<PrimitiveTypeSignature>(Assert.Single(genericInstance.Arguments));
         Assert.Equal(PrimitiveTypeCode.Int32, argument.TypeCode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DecodeTypeSpecification_CustomModel_SubstitutesTypeAndMethodArguments(bool methodParameter)
+    {
+        var blob = new BlobBuilder();
+        blob.WriteByte((byte)SignatureTypeCode.SZArray);
+        blob.WriteByte((byte)(methodParameter ? SignatureTypeCode.GenericMethodParameter : SignatureTypeCode.GenericTypeParameter));
+        blob.WriteCompressedInteger(0);
+        using var owner = CreateTypeSpecificationMetadata(blob, out var handle);
+        var reader = owner.GetMetadataReader();
+        var provider = new IrTypeProvider();
+        var context = new IrGenericContext(
+            ImmutableArray.Create<IrType>(new IrType.Primitive(PrimitiveTypeCode.String)),
+            ImmutableArray.Create<IrType>(new IrType.Primitive(PrimitiveTypeCode.Int32)));
+
+        var decoded = Assert.IsType<IrType.Vector>(handle.DecodeTypeSpecification(reader, provider, context));
+        Assert.Equal(methodParameter ? context.MethodArguments[0] : context.TypeArguments[0], decoded.Element);
+        Assert.Equal(reader.GetTypeSpecification(handle).DecodeSignature(provider, context), decoded);
+    }
+
+    [Fact]
+    public void DecodeTypeSpecification_CustomProvider_RejectsNullArgumentsAndNilHandle()
+    {
+        using var owner = CreateTypeSpecificationMetadata(CreateArrayTypeSpecificationBlob(), out var handle);
+        var reader = owner.GetMetadataReader();
+        var provider = new IrTypeProvider();
+        Assert.Equal("reader", Assert.Throws<ArgumentNullException>(() =>
+            handle.DecodeTypeSpecification(null!, provider, default(IrGenericContext))).ParamName);
+        Assert.Equal("provider", Assert.Throws<ArgumentNullException>(() =>
+            handle.DecodeTypeSpecification<IrType, IrGenericContext>(reader, null!, default)).ParamName);
+        Assert.Equal("handle", Assert.Throws<ArgumentException>(() =>
+            default(TypeSpecificationHandle).DecodeTypeSpecification(reader, provider, default(IrGenericContext))).ParamName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DecodeTypeSpecification_MalformedSignature_PropagatesBadImageFormat(bool invalidTypeCode)
+    {
+        var blob = new BlobBuilder();
+        if (invalidTypeCode)
+        {
+            blob.WriteByte(0xff);
+        }
+        using var owner = CreateTypeSpecificationMetadata(blob, out var handle);
+        Assert.Throws<BadImageFormatException>(() =>
+            handle.DecodeTypeSpecification(owner.GetMetadataReader(), new IrTypeProvider(), default(IrGenericContext)));
     }
 
     // == Generic instantiation ==============================================

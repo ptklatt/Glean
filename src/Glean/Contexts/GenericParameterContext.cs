@@ -75,6 +75,13 @@ public readonly struct GenericParameterContext : IEquatable<GenericParameterCont
     /// <summary>Gets the zero based position within the declaring type or method's generic parameters.</summary>
     public int Index => _genericParameter.Index;
 
+    /// <summary>Gets the number of constraint rows without decoding signatures.</summary>
+    public int ConstraintCount => _genericParameter.GetConstraints().Count;
+
+    /// <summary>Enumerates constraint rows without decoding signatures or allocating.</summary>
+    public GenericParameterConstraintEnumerator EnumerateConstraints()
+        => new GenericParameterConstraintEnumerator(_reader, _genericParameter.GetConstraints());
+
     /// <summary>
     /// Gets the declaring type context if this generic parameter belongs to a type definition; default otherwise.
     /// </summary>

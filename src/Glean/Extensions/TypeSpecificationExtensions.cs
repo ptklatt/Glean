@@ -25,6 +25,23 @@ public static class TypeSpecificationExtensions
         return entityHandle.DecodeTypeSignature(reader, provider, genericContext);
     }
 
+    /// <summary>Decodes a type specification using the supplied provider and generic context. Decoding may allocate.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> or <paramref name="provider"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> is nil.</exception>
+    /// <exception cref="BadImageFormatException">The type specification signature is invalid.</exception>
+    public static TType DecodeTypeSpecification<TType, TContext>(
+        this TypeSpecificationHandle handle,
+        MetadataReader reader,
+        ISignatureTypeProvider<TType, TContext> provider,
+        TContext genericContext)
+    {
+        if (reader == null) { throw new ArgumentNullException(nameof(reader)); }
+        if (provider == null) { throw new ArgumentNullException(nameof(provider)); }
+        if (handle.IsNil) { throw new ArgumentException("Handle cannot be nil.", nameof(handle)); }
+
+        return reader.GetTypeSpecification(handle).DecodeSignature(provider, genericContext);
+    }
+
     /// <summary>
     /// Checks if a TypeSpecification represents a generic instantiation.
     /// </summary>

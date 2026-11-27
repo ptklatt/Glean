@@ -136,6 +136,13 @@ false for native or external module entry points and absent or invalid method to
 `method.Definition.GetILSpan(peReader)` for borrowed IL bytes, or `DecodeILBytes`
 for an allocated copy.
 
+Use `parameter.EnumerateConstraints()` for constraint rows and their type handles
+or custom attributes. Enumeration does not decode signatures. Call
+`constraint.DecodeType()` for Glean's signature model, or pass your own provider
+and generic context to `DecodeType(provider, context)`. The
+`typeSpecHandle.DecodeTypeSpecification(reader, provider, context)` overload
+also decodes directly into your model. Signature decoding may allocate.
+
 Context enumerators, identity checks such as `NameIs` and `NamespaceIs`, and
 `MetadataTraversal` use raw metadata without building signature graphs. Struct
 visitors implement every callback explicitly; unused callbacks can have empty bodies.

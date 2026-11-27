@@ -113,7 +113,30 @@ Require(custom.ParameterTypes[3] is IrType.Named named &&
     (named.Failure == ResolutionFailureReason.None),
     "Custom IR did not retain and resolve the named parameter type.");
 
-Console.WriteLine($"ConsumerRuntime={RuntimeInformation.FrameworkDescription} GleanTarget={expectedAsset} PublicTypes={count} SRMPath={typeof(MetadataReader).Assembly.Location} Checks=traversal,closure,parameters,custom-ir,pe-access,entry-point");
+Require(closure.EntryContext.TryFindType("PackageChecks", "Constrained`1", out var constrained), "Constraint fixture was not found.");
+var genericParameters = constrained.EnumerateGenericParameters();
+Require(genericParameters.MoveNext(), "Generic parameter was not found.");
+var genericParameter = genericParameters.Current;
+Require(genericParameter.ConstraintCount == 1, "Constraint row count differs.");
+var constraints = genericParameter.EnumerateConstraints();
+Require(constraints.MoveNext(), "Constraint row was not found.");
+var constraint = constraints.Current;
+Require(ReferenceEquals(constraint.Reader, closure.EntryReader) && (constraint.Parameter == genericParameter.Handle),
+    "Constraint context lost its owner or parameter.");
+Require(constraint.Type.Kind == HandleKind.TypeSpecification, "Constraint type is not a TypeSpec.");
+Require(constraint.DecodeType() is Glean.Signatures.GenericInstanceSignature, "Constraint signature was not decoded.");
+var irProvider = new IrTypeProvider();
+var irContext = new IrGenericContext(System.Collections.Immutable.ImmutableArray.Create<IrType>(
+    new IrType.Primitive(PrimitiveTypeCode.String)));
+var decodedConstraint = constraint.DecodeType(irProvider, irContext);
+var decodedSpecification = ((TypeSpecificationHandle)constraint.Type).DecodeTypeSpecification(closure.EntryReader, irProvider, irContext);
+Require(decodedConstraint is IrType.GenericInstance constraintInstance &&
+    (constraintInstance.Arguments[0] == irContext.TypeArguments[0]) &&
+    decodedSpecification is IrType.GenericInstance specificationInstance &&
+    (specificationInstance.Arguments[0] == irContext.TypeArguments[0]),
+    "Constraint or TypeSpec custom-provider decoding lost its generic context.");
+
+Console.WriteLine($"ConsumerRuntime={RuntimeInformation.FrameworkDescription} GleanTarget={expectedAsset} PublicTypes={count} SRMPath={typeof(MetadataReader).Assembly.Location} Checks=traversal,closure,parameters,custom-ir,pe-access,entry-point,constraints,typespec");
 
 static void Require(bool condition, string message)
 {
@@ -125,6 +148,10 @@ static void Require(bool condition, string message)
 
 namespace PackageChecks
 {
+    public sealed class Constrained<T> where T : IComparable<T>
+    {
+    }
+
     public sealed class Fixture : IDisposable
     {
         [return: MaybeNull]
