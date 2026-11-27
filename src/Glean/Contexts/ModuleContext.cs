@@ -1,4 +1,5 @@
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Runtime.CompilerServices;
 
 using Glean.Enumerators;
@@ -151,6 +152,12 @@ public readonly struct ModuleContext : IEquatable<ModuleContext>
     {
         return MemberReferenceEnumerator.Create(_reader, _reader.MemberReferences);
     }
+
+    /// <summary>Gets the number of generic method instantiation rows.</summary>
+    public int MethodSpecificationCount => _reader.GetTableRowCount(TableIndex.MethodSpec);
+
+    /// <summary>Enumerates generic method instantiation rows without decoding signatures or allocating.</summary>
+    public MethodSpecificationEnumerator EnumerateMethodSpecifications() => new MethodSpecificationEnumerator(_reader);
 
     /// <summary>
     /// Enumerates all assembly references in this module.

@@ -136,7 +136,37 @@ Require(decodedConstraint is IrType.GenericInstance constraintInstance &&
     (specificationInstance.Arguments[0] == irContext.TypeArguments[0]),
     "Constraint or TypeSpec custom-provider decoding lost its generic context.");
 
-Console.WriteLine($"ConsumerRuntime={RuntimeInformation.FrameworkDescription} GleanTarget={expectedAsset} PublicTypes={count} SRMPath={typeof(MetadataReader).Assembly.Location} Checks=traversal,closure,parameters,custom-ir,pe-access,entry-point,constraints,typespec");
+_ = PackageChecks.Fixture.MakeEmpty<int>();
+int specificationCount = 0;
+bool localSpecification = false;
+bool externalSpecification = false;
+foreach (var specification in closure.EntryContext.Module.EnumerateMethodSpecifications())
+{
+    specificationCount++;
+    Require(ReferenceEquals(specification.Reader, closure.EntryReader) && (!specification.SignatureHandle.IsNil),
+        "Method specification lost its owning reader or signature.");
+    if ((specification.Method.Kind == HandleKind.MethodDefinition) &&
+        MethodContext.Create(specification.Reader, (MethodDefinitionHandle)specification.Method).NameIs("MakeEmpty"))
+    {
+        Require(specification.DecodeSignature() is [Glean.Signatures.PrimitiveTypeSignature { TypeCode: PrimitiveTypeCode.Int32 }],
+            "Local method instantiation did not retain its concrete type argument.");
+        localSpecification = true;
+    }
+    else if ((specification.Method.Kind == HandleKind.MemberReference) &&
+        MemberReferenceContext.Create(specification.Reader, (MemberReferenceHandle)specification.Method).NameIs("Empty") &&
+        (specification.DecodeSignature() is [Glean.Signatures.GenericMethodParameterSignature { Index: 0 }]))
+    {
+        var arguments = specification.DecodeSignature(irProvider, new IrGenericContext(MethodArguments:
+            System.Collections.Immutable.ImmutableArray.Create<IrType>(new IrType.Primitive(PrimitiveTypeCode.Int32))));
+        Require(arguments is [IrType.Primitive { Code: PrimitiveTypeCode.Int32 }],
+            "Referenced method instantiation lost its generic context.");
+        externalSpecification = true;
+    }
+}
+Require((specificationCount == closure.EntryContext.Module.MethodSpecificationCount) && localSpecification && externalSpecification,
+    "Method specification traversal omitted an instantiation.");
+
+Console.WriteLine($"ConsumerRuntime={RuntimeInformation.FrameworkDescription} GleanTarget={expectedAsset} PublicTypes={count} SRMPath={typeof(MetadataReader).Assembly.Location} Checks=traversal,closure,parameters,custom-ir,pe-access,entry-point,constraints,typespec,methodspec");
 
 static void Require(bool condition, string message)
 {
@@ -154,6 +184,8 @@ namespace PackageChecks
 
     public sealed class Fixture : IDisposable
     {
+        public static T[] MakeEmpty<T>() => Array.Empty<T>();
+
         [return: MaybeNull]
         public static T[] Inspect<T>(int count, ref T value, string label = "guest", IDisposable? resource = null)
         {

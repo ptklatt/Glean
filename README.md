@@ -143,6 +143,13 @@ and generic context to `DecodeType(provider, context)`. The
 `typeSpecHandle.DecodeTypeSpecification(reader, provider, context)` overload
 also decodes directly into your model. Signature decoding may allocate.
 
+`module.EnumerateMethodSpecifications()` exposes generic method instantiations.
+Each context provides its target method handle and signature blob;
+`DecodeSignature()` decodes the type arguments, leaving open parameters symbolic.
+Pass a provider and the referring type/method's generic context to decode into
+your own model with substitutions. This does not resolve the target method or
+decode its parameter and return types.
+
 Context enumerators, identity checks such as `NameIs` and `NamespaceIs`, and
 `MetadataTraversal` use raw metadata without building signature graphs. Struct
 visitors implement every callback explicitly; unused callbacks can have empty bodies.
